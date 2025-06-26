@@ -50,7 +50,7 @@ BOOL strToFloatDegPcFail(const CHAR* cin, F32* out)
 {
   if (sscanf(cin, "%f", out) == 1)
   {
-    if ((tolower(cin[strlen(cin) - 1]) == 'd') || ((unsigned char)cin[strlen(cin) - 1] == 0xb0)) // degree, '°'
+    if ((tolower(cin[strlen(cin) - 1]) == 'd') || ((unsigned char)cin[strlen(cin) - 1] == 0xb0)) // degree, 'ï¿½'
     {
       *out /= 360;
     }
@@ -128,6 +128,17 @@ public:
   inline I32 get_command(CHAR* string) const { return sprintf(string, "-%s %lf %lf %lf ", name(), center_x, center_y, radius); };
   inline BOOL filter(const LASpoint* point) { return (!point->inside_circle(center_x, center_y, radius_squared)); };
   LAScriterionKeepCircle(F64 x, F64 y, F64 radius) { this->center_x = x; this->center_y = y; this->radius = radius; this->radius_squared = radius * radius; };
+private:
+  F64 center_x, center_y, radius, radius_squared;
+};
+
+class LAScriterionDropCircle : public LAScriterion
+{
+public:
+  inline const CHAR* name() const { return "drop_circle"; };
+  inline I32 get_command(CHAR* string) const { return sprintf(string, "-%s %lf %lf %lf ", name(), center_x, center_y, radius); };
+  inline BOOL filter(const LASpoint* point) { return (point->inside_circle(center_x, center_y, radius_squared)); };
+  LAScriterionDropCircle(F64 x, F64 y, F64 radius) { this->center_x = x; this->center_y = y; this->radius = radius; this->radius_squared = radius * radius; };
 private:
   F64 center_x, center_y, radius, radius_squared;
 };
@@ -2040,6 +2051,7 @@ void LASfilter::usage() const
   //pre-formated multiline message
   LASMessage(LAS_INFO, "Filter points based on their coordinates.\n" \
     "  -keep_tile 631000 4834000 1000 (ll_x ll_y size)\n" \
+    "  -drop_circle 630250.00 4834750.00 100 (x y radius)\n" \
     "  -keep_circle 630250.00 4834750.00 100 (x y radius)\n" \
     "  -keep_xy 630000 4834000 631000 4836000 (min_x min_y max_x max_y)\n" \
     "  -drop_xy 630000 4834000 631000 4836000 (min_x min_y max_x max_y)\n" \
@@ -4238,6 +4250,35 @@ BOOL LASfilter::parse(int argc, char* argv[])
           *argv[i] = '\0'; *argv[i + 1] = '\0'; i += 1;
         }
       }
+      else if (strcmp(argv[i], "-drop_circle") == 0)
+      {
+        printf("Parsing argument: %s\n", argv[i]);
+        if ((i + 3) >= argc)
+        {
+          laserror("'%s' needs 3 arguments: center_x center_y radius", argv[i]);
+          return FALSE;
+        }
+        F64 center_x;
+        if (sscanf(argv[i + 1], "%lf", &center_x) != 1)
+        {
+          laserror("'%s' needs 3 arguments: center_x center_y radius but '%s' is no valid center_x", argv[i], argv[i + 1]);
+          return FALSE;
+        }
+        F64 center_y;
+        if (sscanf(argv[i + 2], "%lf", &center_y) != 1)
+        {
+          laserror("'%s' needs 3 arguments: center_x center_y radius but '%s' is no valid center_y", argv[i], argv[i + 2]);
+          return FALSE;
+        }
+        F64 radius;
+        if (sscanf(argv[i + 3], "%lf", &radius) != 1)
+        {
+          laserror("'%s' needs 3 arguments: center_x center_y radius but '%s' is no valid radius", argv[i], argv[i + 3]);
+          return FALSE;
+        }
+        add_criterion(new LAScriterionDropCircle(center_x, center_y, radius));
+        *argv[i] = '\0'; *argv[i + 1] = '\0'; *argv[i + 2] = '\0'; *argv[i + 3] = '\0'; i += 3;
+      }
       else if (strncmp(argv[i], "-drop_return", 12) == 0)
       {
         if (strcmp(argv[i], "-drop_return") == 0)
@@ -5400,7 +5441,8 @@ U32 LASfilter::get_decompress_selective() const
 
 void LASfilter::addClipCircle(F64 x, F64 y, F64 radius)
 {
-  add_criterion(new LAScriterionKeepCircle(x, y, radius));
+  add_criterion(new LAScriterionDropCircle(x, y, radius));
+  
 }
 
 void LASfilter::addClipBox(F64 min_x, F64 min_y, F64 min_z, F64 max_x, F64 max_y, F64 max_z)

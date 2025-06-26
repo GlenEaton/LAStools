@@ -1,0 +1,273 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="MinSizeRel|x64">
+      <Configuration>MinSizeRel</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|x64">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{4D31BE85-FBAA-32AC-BD95-1080FD57CE15}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0.22621.0</WindowsTargetPlatformVersion>
+    <Platform>x64</Platform>
+    <ProjectName>LASlib</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Users\user\LAStools\LASlib\lib\Debug\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">LASlib.dir\Debug\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">LASlib</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\user\LAStools\LASlib\lib\Release\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">LASlib.dir\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">LASlib</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Users\user\LAStools\LASlib\lib\MinSizeRel\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">LASlib.dir\MinSizeRel\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">LASlib</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Users\user\LAStools\LASlib\lib\RelWithDebInfo\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">LASlib.dir\RelWithDebInfo\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">LASlib</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">.lib</TargetExt>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\user\LAStools\LASlib\inc;C:\Users\user\LAStools\LASzip\src;C:\Users\user\LAStools\LASzip\include\laszip;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <Optimization>Disabled</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;_CRT_SECURE_NO_WARNINGS;NDEBUG;UNORDERED;HAVE_UNORDERED_MAP;CMAKE_INTDIR="Debug"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ProgramDataBaseFileName>C:\Users\user\LAStools\LASlib\lib\Debug\LASlib.pdb</ProgramDataBaseFileName>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;NDEBUG;UNORDERED;HAVE_UNORDERED_MAP;CMAKE_INTDIR=\"Debug\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\user\LAStools\LASlib\inc;C:\Users\user\LAStools\LASzip\src;C:\Users\user\LAStools\LASzip\include\laszip;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\user\LAStools\LASlib\inc;C:\Users\user\LAStools\LASzip\src;C:\Users\user\LAStools\LASzip\include\laszip;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\user\LAStools\LASlib\inc;C:\Users\user\LAStools\LASzip\src;C:\Users\user\LAStools\LASzip\include\laszip;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_CRT_SECURE_NO_WARNINGS;UNORDERED;HAVE_UNORDERED_MAP;CMAKE_INTDIR="Release"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ProgramDataBaseFileName>C:\Users\user\LAStools\LASlib\lib\Release\LASlib.pdb</ProgramDataBaseFileName>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_CRT_SECURE_NO_WARNINGS;UNORDERED;HAVE_UNORDERED_MAP;CMAKE_INTDIR=\"Release\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\user\LAStools\LASlib\inc;C:\Users\user\LAStools\LASzip\src;C:\Users\user\LAStools\LASzip\include\laszip;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\user\LAStools\LASlib\inc;C:\Users\user\LAStools\LASzip\src;C:\Users\user\LAStools\LASzip\include\laszip;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\user\LAStools\LASlib\inc;C:\Users\user\LAStools\LASzip\src;C:\Users\user\LAStools\LASzip\include\laszip;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <Optimization>MinSpace</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_CRT_SECURE_NO_WARNINGS;UNORDERED;HAVE_UNORDERED_MAP;CMAKE_INTDIR="MinSizeRel"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ProgramDataBaseFileName>C:\Users\user\LAStools\LASlib\lib\MinSizeRel\LASlib.pdb</ProgramDataBaseFileName>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_CRT_SECURE_NO_WARNINGS;UNORDERED;HAVE_UNORDERED_MAP;CMAKE_INTDIR=\"MinSizeRel\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\user\LAStools\LASlib\inc;C:\Users\user\LAStools\LASzip\src;C:\Users\user\LAStools\LASzip\include\laszip;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\user\LAStools\LASlib\inc;C:\Users\user\LAStools\LASzip\src;C:\Users\user\LAStools\LASzip\include\laszip;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\user\LAStools\LASlib\inc;C:\Users\user\LAStools\LASzip\src;C:\Users\user\LAStools\LASzip\include\laszip;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_CRT_SECURE_NO_WARNINGS;UNORDERED;HAVE_UNORDERED_MAP;CMAKE_INTDIR="RelWithDebInfo"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ProgramDataBaseFileName>C:\Users\user\LAStools\LASlib\lib\RelWithDebInfo\LASlib.pdb</ProgramDataBaseFileName>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_CRT_SECURE_NO_WARNINGS;UNORDERED;HAVE_UNORDERED_MAP;CMAKE_INTDIR=\"RelWithDebInfo\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\user\LAStools\LASlib\inc;C:\Users\user\LAStools\LASzip\src;C:\Users\user\LAStools\LASzip\include\laszip;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\user\LAStools\LASlib\inc;C:\Users\user\LAStools\LASzip\src;C:\Users\user\LAStools\LASzip\include\laszip;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lasreader.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lasignore.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\laswriter.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lasreader_las.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lasreader_bin.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lasreader_shp.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lasreader_asc.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lasreader_bil.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lasreader_dtm.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lasreader_ply.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lasreader_qfit.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lasreader_txt.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lasreadermerged.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lasreaderbuffered.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lasreaderstored.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lasreaderpipeon.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\laswriter_las.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\laswriter_bin.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\laswriter_qfit.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\laswriter_wrl.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\laswriter_txt.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\laswritercompatible.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\laswaveform13reader.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\laswaveform13writer.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lasutility.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lasfilter.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lastransform.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\laskdtree.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\lascopc.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASlib\src\fopen_compressed.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\lasreadpoint.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\lasreaditemcompressed_v1.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\lasreaditemcompressed_v2.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\lasreaditemcompressed_v3.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\lasreaditemcompressed_v4.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\laswritepoint.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\laswriteitemcompressed_v1.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\laswriteitemcompressed_v2.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\laswriteitemcompressed_v3.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\laswriteitemcompressed_v4.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\integercompressor.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\arithmeticdecoder.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\arithmeticencoder.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\arithmeticmodel.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\lasindex.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\lasquadtree.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\lasinterval.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\laszip.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\mydefs.cpp" />
+    <ClCompile Include="C:\Users\user\LAStools\LASzip\src\lasmessage.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
