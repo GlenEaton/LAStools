@@ -598,7 +598,7 @@ BOOL LASreaderPLY::seek(const I64 p_index)
   else if (p_index < p_idx)
   {
     if (piped) return FALSE;
-    fseek(file, 0, SEEK_SET);
+    fseek_las(file, 0, SEEK_SET);
     // read the first line with full parse_string
     I32 i = 0;
     while (fgets(line, 512, file))
@@ -1171,16 +1171,7 @@ BOOL LASreaderPLY::read_binary_point()
     }
     else if (p[0] == 'c') // we expect the classification
     {
-      if (point_type > 5)
-      {
-        if ((value < 0) || (value > 255)) LASMessage(LAS_WARNING, "classification %g is out of range of eight bits", value);
-        point.set_extended_classification(U8_QUANTIZE(value));
-      }
-      else
-      {
-        if ((value < 0) || (value > 31)) LASMessage(LAS_WARNING, "classification %g is out of range of five bits", value);
-        point.set_classification(U8_QUANTIZE(value) & 31);
-      }
+      point.set_classification_int(static_cast<I32>(value));
     }
     else if (p[0] == 'u') // we expect the user data
     {
@@ -1433,15 +1424,7 @@ BOOL LASreaderPLY::parse(const char* parse_string)
       while (l[0] && (l[0] == ' ' || l[0] == ',' || l[0] == '\t' || l[0] == ';')) l++; // first skip white spaces
       if (l[0] == 0) return FALSE;
       if (sscanf(l, "%d", &temp_i) != 1) return FALSE;
-      if (temp_i < 0 || temp_i > 255)
-      {
-        LASMessage(LAS_WARNING, "classification %d is out of range of unsigned char", temp_i);
-        point.set_classification(U8_CLAMP(temp_i));
-      }
-      else
-      {
-        point.set_classification((U8)temp_i);
-      }
+      point.set_classification_int(temp_i);
       while (l[0] && l[0] != ' ' && l[0] != ',' && l[0] != '\t' && l[0] != ';') l++; // then advance to next white space
     }
     else if (p[0] == 'u') // we expect the user data
@@ -1571,8 +1554,8 @@ BOOL LASreaderPLY::parse_header()
   if (parse_string) free(parse_string);
   if (type_string) free(type_string);
 
-  parse_string = (CHAR*)malloc(64);
-  type_string = (CHAR*)malloc(64);
+  parse_string = (CHAR*)malloc_las(64);
+  type_string = (CHAR*)malloc_las(64);
   memset(parse_string, 0, 64);
   memset(type_string, 0, 64);
 

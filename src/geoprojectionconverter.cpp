@@ -49,7 +49,6 @@
 #include "lasmessage.hpp"
 #include "lasutility.hpp"
 #include "mydefs.hpp"
-#include "proj_loader.h"
 #include "wktparser.h"
 
 #if defined(_MSC_VER) && (_MSC_FULL_VER >= 150000000)
@@ -65,9 +64,6 @@ static const double PI_OVER_4 = PI / 4;
 static const double EPSILON = 0.0000000001;
 static const double deg2rad = PI / 180.0;
 static const double rad2deg = 180.0 / PI;
-
-static const double feet2meter = 0.3048;
-static const double surveyfeet2meter = 0.3048006096012;
 
 static const int GEO_PROJECTION_UTM = 0;
 static const int GEO_PROJECTION_LCC = 1;
@@ -254,7 +250,7 @@ static const short PCS_NAD27_St_Croix = 32060;
 
 static const short PCS_NAD83_Alabama_East = 26929;
 static const short PCS_NAD83_Alabama_West = 26930;
-static const short PCS_NAD83_Alaska_zone_1 = 26931; /* Hotine Oblique Mercator Projection not supported*/
+static const short PCS_NAD83_Alaska_zone_1 = 26931;
 static const short PCS_NAD83_Alaska_zone_2 = 26932;
 static const short PCS_NAD83_Alaska_zone_3 = 26933;
 static const short PCS_NAD83_Alaska_zone_4 = 26934;
@@ -377,6 +373,7 @@ static const short PCS_NAD83_Puerto_Rico = 32161;
 
 static const short GCTP_NAD83_Alabama_East = 101;
 static const short GCTP_NAD83_Alabama_West = 102;
+static const short GCTP_NAD83_Alaska_zone_1 = 5001;
 static const short GCTP_NAD83_Alaska_zone_2 = 5002;
 static const short GCTP_NAD83_Alaska_zone_3 = 5003;
 static const short GCTP_NAD83_Alaska_zone_4 = 5004;
@@ -753,6 +750,7 @@ static const StatePlaneTM state_plane_tm_nad83_list[] = {
     // geotiff key, zone, false east [m], false north [m], ProjOrig(Lat), CentMerid(Long), scale factor
     StatePlaneTM(PCS_NAD83_Alabama_East, "AL_E", 200000, 0, 30.5, -85.83333333, 0.99996),
     StatePlaneTM(PCS_NAD83_Alabama_West, "AL_W", 600000, 0, 30, -87.5, 0.999933333),
+    StatePlaneTM(PCS_NAD83_Alaska_zone_1, "AK_1", 500000, 0, 54, -130, 0.9999),
     StatePlaneTM(PCS_NAD83_Alaska_zone_2, "AK_2", 500000, 0, 54, -142, 0.9999),
     StatePlaneTM(PCS_NAD83_Alaska_zone_3, "AK_3", 500000, 0, 54, -146, 0.9999),
     StatePlaneTM(PCS_NAD83_Alaska_zone_4, "AK_4", 500000, 0, 54, -150, 0.9999),
@@ -813,14 +811,15 @@ static const short EPSG_EOV_HD72 = 23700;
 ProjParameters::ProjParameters()
     : arg_count(0),
       max_param(7),
+      proj_info_args(nullptr),
       valid_proj_info_params{"wkt", "js", "str", "epsg", "el", "datum", "cs"},
-      header_wkt_representation(nullptr),
-      proj_crs_infos(nullptr),
       proj_ctx(nullptr),
       proj_source_crs(nullptr),
       proj_target_crs(nullptr),
       proj_transform_crs(nullptr),
-      proj_info_args(nullptr) {
+      header_wkt_representation(nullptr),
+      proj_crs_infos(nullptr)
+{
 }
 
 ProjParameters::~ProjParameters() {
@@ -830,22 +829,22 @@ ProjParameters::~ProjParameters() {
 
   // Free the PROJ context
   if (proj_ctx) {
-    proj_context_destroy(proj_ctx);
+    my_proj_context_destroy(proj_ctx);
     proj_ctx = nullptr;  // Set to nullptr to avoid dangling pointers
   }
   // Free the source CRS
   if (proj_source_crs) {
-    proj_destroy(proj_source_crs);
+    proj_destroy_ptr(proj_source_crs);
     proj_source_crs = nullptr;
   }
   // Free the target CRS
   if (proj_target_crs) {
-    proj_destroy(proj_target_crs);
+    proj_destroy_ptr(proj_target_crs);
     proj_target_crs = nullptr;
   }
   // Free the transform CRS
   if (proj_transform_crs) {
-    proj_destroy(proj_transform_crs);
+    proj_destroy_ptr(proj_transform_crs);
     proj_transform_crs = nullptr;
   }
   // Release memory if proj_info_args
@@ -883,7 +882,7 @@ void ProjParameters::set_header_wkt_representation(PJ* proj_crs) {
   // Calling up and outputting the WKT display
   if (proj_ctx && proj_crs) {
     const char* options[] = {"MULTILINE=NO", nullptr};
-    const char* wkt_representation = proj_as_wkt(proj_ctx, proj_crs, PJ_WKT1_GDAL, options);
+    const char* wkt_representation = proj_as_wkt_ptr(proj_ctx, proj_crs, PJ_WKT1_GDAL, options);
 
     if (!wkt_representation) {
       LASMessage(
@@ -902,7 +901,7 @@ const char* ProjParameters::get_wkt_representation(bool source /*=true*/) const 
   if (proj_ctx && ((proj_source_crs && source) || (proj_target_crs && !source))) {
     // Retrieving and outputting the WKT representation
     const char* options[] = {"MULTILINE=NO", nullptr};
-    const char* wkt = proj_as_wkt(proj_ctx, source ? proj_source_crs : proj_target_crs, PJ_WKT1_GDAL, options);
+    const char* wkt = proj_as_wkt_ptr(proj_ctx, source ? proj_source_crs : proj_target_crs, PJ_WKT1_GDAL, options);
     if (!wkt) {
       laserror("The WKT representation of the PROJ CRS could not be generated.");
     }
@@ -917,7 +916,7 @@ const char* ProjParameters::get_wkt_representation(bool source /*=true*/) const 
 const char* ProjParameters::get_json_representation(bool source /*=true*/) const {
   if (proj_ctx && ((proj_source_crs && source) || (proj_target_crs && !source))) {
     // Retrieving and outputting the JSON representation
-    const char* json = proj_as_projjson(proj_ctx, source ? proj_source_crs : proj_target_crs, nullptr);
+    const char* json = proj_as_projjson_ptr(proj_ctx, source ? proj_source_crs : proj_target_crs, nullptr);
     if (!json) {
       laserror("The json representation of the PROJ CRS could not be generated.");
     }
@@ -932,7 +931,7 @@ const char* ProjParameters::get_json_representation(bool source /*=true*/) const
 const char* ProjParameters::get_projString_representation(bool source /*=true*/) const {
   if (proj_ctx && ((proj_source_crs && source) || (proj_target_crs && !source))) {
     // Retrieving and outputting the PROJ string representation
-    const char* projString = proj_as_proj_string(proj_ctx, source ? proj_source_crs : proj_target_crs, PJ_PROJ_5, nullptr);
+    const char* projString = proj_as_proj_string_ptr(proj_ctx, source ? proj_source_crs : proj_target_crs, PJ_PROJ_5, nullptr);
     if (!projString) {
       laserror("The PROJ string representation of the PROJ CRS could not be generated.");
     }
@@ -948,7 +947,7 @@ const char* ProjParameters::get_epsg_representation(bool source /*=true*/) const
   if (proj_ctx && ((proj_source_crs && source) || (proj_target_crs && !source))) {
     // Run through all identification codes
     for (int i = 0;; ++i) {
-      const char* id_code = proj_get_id_code(source ? proj_source_crs : proj_target_crs, i);
+      const char* id_code = proj_get_id_code_ptr(source ? proj_source_crs : proj_target_crs, i);
 
       if (!id_code) break;
       LASMessage(LAS_VERY_VERBOSE, "the PROJ EPSG code representation object was successfully created, EPSG: '%s'", id_code);
@@ -962,7 +961,7 @@ const char* ProjParameters::get_epsg_representation(bool source /*=true*/) const
 /// IMPORTANT: the proj context and the PROJ crs object must have been created before calling the function
 const char* ProjParameters::get_ellipsoid_info(bool source /*=true*/) {
   if (proj_ctx && ((proj_source_crs && source) || (proj_target_crs && !source))) {
-    PJ* ellipsoid = proj_get_ellipsoid(proj_ctx, source ? proj_source_crs : proj_target_crs);
+    PJ* ellipsoid = proj_get_ellipsoid_ptr(proj_ctx, source ? proj_source_crs : proj_target_crs);
 
     if (ellipsoid) {
       double semi_major_metre = 0.0;
@@ -972,10 +971,10 @@ const char* ProjParameters::get_ellipsoid_info(bool source /*=true*/) {
       LASMessage(LAS_VERBOSE, "the PROJ ellipsoid object was successfully created");
 
       // Retrieving the ellipsoid parameters
-      int result = proj_ellipsoid_get_parameters(proj_ctx, ellipsoid, &semi_major_metre, &semi_minor_metre, &is_semi_minor_computed, &inv_flattening);
+      int result = proj_ellipsoid_get_parameters_ptr(proj_ctx, ellipsoid, &semi_major_metre, &semi_minor_metre, &is_semi_minor_computed, &inv_flattening);
 
       if (result == 0) {
-        proj_destroy(ellipsoid);
+        proj_destroy_ptr(ellipsoid);
         laserror("Failed to retrieve ellipsoid parameters.");
       }
       LASMessage(
@@ -991,7 +990,7 @@ const char* ProjParameters::get_ellipsoid_info(bool source /*=true*/) {
           "Inverse Flattening: %.6f",
           semi_major_metre, semi_minor_metre, is_semi_minor_computed ? " (computed)" : "", inv_flattening);
 
-      proj_destroy(ellipsoid);
+      proj_destroy_ptr(ellipsoid);
       return proj_crs_infos;
     }
   }
@@ -1002,12 +1001,12 @@ const char* ProjParameters::get_ellipsoid_info(bool source /*=true*/) {
 /// IMPORTANT: the proj context and the PROJ crs object must have been created before calling the function
 const char* ProjParameters::get_datum_info(bool source /*=true*/) {
   if (proj_ctx && ((proj_source_crs && source) || (proj_target_crs && !source))) {
-    PJ* datum_ensemble = proj_crs_get_datum_ensemble(proj_ctx, source ? proj_source_crs : proj_target_crs);
+    PJ* datum_ensemble = proj_crs_get_datum_ensemble_ptr(proj_ctx, source ? proj_source_crs : proj_target_crs);
 
     if (datum_ensemble) {
-      const char* datum_name = proj_get_name(source ? proj_source_crs : proj_target_crs);
-      int member_count = proj_datum_ensemble_get_member_count(proj_ctx, datum_ensemble);
-      double accuracy = proj_datum_ensemble_get_accuracy(proj_ctx, datum_ensemble);
+      const char* datum_name = proj_get_name_ptr(source ? proj_source_crs : proj_target_crs);
+      int member_count = proj_datum_ensemble_get_member_count_ptr(proj_ctx, datum_ensemble);
+      double accuracy = proj_datum_ensemble_get_accuracy_ptr(proj_ctx, datum_ensemble);
 
       // Formatted output of date information
       proj_crs_infos = new char[1024];
@@ -1031,32 +1030,33 @@ const char* ProjParameters::get_datum_info(bool source /*=true*/) {
 #endif
       // Get and format member information
       for (int i = 0; i < member_count; ++i) {
-        PJ* member = proj_datum_ensemble_get_member(proj_ctx, datum_ensemble, i);
+        PJ* member = proj_datum_ensemble_get_member_ptr(proj_ctx, datum_ensemble, i);
         if (member) {
-          const char* member_name = proj_get_name(member);
+          const char* member_name = proj_get_name_ptr(member);
           if (member_name) {
             offset += snprintf(
                 proj_crs_infos + offset, sizeof(proj_crs_infos) - offset, "Member %d: %s%s", i + 1, member_name, (i < member_count - 1) ? "\n" : "");
           }
-          proj_destroy(member);
+          proj_destroy_ptr(member);
         }
       }
-      proj_destroy(datum_ensemble);
+      proj_destroy_ptr(datum_ensemble);
       return proj_crs_infos;
     } else {
       // If the date is not available as an ensemble, get it directly
-      PJ* datum = proj_crs_get_datum(proj_ctx, source ? proj_source_crs : proj_target_crs);
+      PJ* datum = proj_crs_get_datum_ptr(proj_ctx, source ? proj_source_crs : proj_target_crs);
       if (datum) {
         LASMessage(LAS_VERBOSE, "the PROJ datum object was successfully created");
-        const char* datum_name = proj_get_name(datum);
+        const char* datum_name = proj_get_name_ptr(datum);
         if (datum_name) {
           LASMessage(LAS_VERY_VERBOSE, "the PROJ datum name was successfully created '%s'", datum_name);
-          proj_crs_infos = new char[256];
-          snprintf(proj_crs_infos, sizeof(proj_crs_infos), "Name: %s\n", datum_name);
+          size_t bufSize = 256;
+          proj_crs_infos = new char[bufSize];
+          snprintf(proj_crs_infos, bufSize, "Name: %s\n", datum_name);
           return proj_crs_infos;
         }
       }
-      proj_destroy(datum);
+      proj_destroy_ptr(datum);
     }
   }
   return nullptr;
@@ -1066,11 +1066,11 @@ const char* ProjParameters::get_datum_info(bool source /*=true*/) {
 /// IMPORTANT: the proj context and the PROJ crs object must have been created before calling the function
 const char* ProjParameters::get_coord_system_info(bool source /*=true*/) {
   if (proj_ctx && ((proj_source_crs && source) || (proj_target_crs && !source))) {
-    PJ* coord_system = proj_crs_get_coordinate_system(proj_ctx, source ? proj_source_crs : proj_target_crs);
+    PJ* coord_system = proj_crs_get_coordinate_system_ptr(proj_ctx, source ? proj_source_crs : proj_target_crs);
 
     if (coord_system) {
       LASMessage(LAS_VERBOSE, "the PROJ coordinate system object was successfully created");
-      PJ_COORDINATE_SYSTEM_TYPE cs_type = proj_cs_get_type(proj_ctx, coord_system);
+      PJ_COORDINATE_SYSTEM_TYPE cs_type = proj_cs_get_type_ptr(proj_ctx, coord_system);
 
       const int buffer_size = 2048;
       proj_crs_infos = new char[buffer_size];
@@ -1110,7 +1110,7 @@ const char* ProjParameters::get_coord_system_info(bool source /*=true*/) {
           break;
       }
       // Retrieving the axis information
-      int axis_count = proj_cs_get_axis_count(proj_ctx, coord_system);
+      int axis_count = proj_cs_get_axis_count_ptr(proj_ctx, coord_system);
       if (axis_count > 0) {
         LASMessage(LAS_VERY_VERBOSE, "the PROJ axis count object are successfully created");
         for (int i = 0; i < axis_count; ++i) {
@@ -1122,7 +1122,7 @@ const char* ProjParameters::get_coord_system_info(bool source /*=true*/) {
           const char* unit_auth_name = nullptr;
           const char* unit_code = nullptr;
 
-          proj_cs_get_axis_info(
+          proj_cs_get_axis_info_ptr(
               proj_ctx, coord_system, i, &axis_name, &axis_abbreviation, &axis_direction, &unit_conv_factor, &unit_name, &unit_auth_name, &unit_code);
 
           // Attach the axis information
@@ -1137,7 +1137,7 @@ const char* ProjParameters::get_coord_system_info(bool source /*=true*/) {
           strcat_las(proj_crs_infos, buffer_size - strlen(proj_crs_infos) - 1, axis_info);
         }
       }
-      proj_destroy(coord_system);
+      proj_destroy_ptr(coord_system);
 
       return proj_crs_infos;
     } else {
@@ -1159,7 +1159,6 @@ bool ProjParameters::proj_info_arg_contains(const char* arg) const {
 
 bool GeoProjectionConverter::set_projection_from_geo_keys(
     int num_geo_keys, const GeoProjectionGeoKeys* geo_keys, char* geo_ascii_params, double* geo_double_params, char* description, bool source) {
-  bool user_defined_ellipsoid = false;
   int user_defined_projection = 0;
   int offsetProjStdParallel1GeoKey = -1;
   int offsetProjStdParallel2GeoKey = -1;
@@ -1179,7 +1178,7 @@ bool GeoProjectionConverter::set_projection_from_geo_keys(
   int offsetProjRectifiedGridAngleGeoKey = -1;
   bool has_projection = false;
   int ellipsoid = -1;
-  int datum_code = -1;
+  //int datum_code = -1;  // Unused
   int gcs_code = -1;
 
   this->num_geo_keys = num_geo_keys;
@@ -1213,7 +1212,6 @@ bool GeoProjectionConverter::set_projection_from_geo_keys(
       case 2048:  // GeographicTypeGeoKey
         switch (geo_keys[i].value_offset) {
           case 32767:  // user-defined GCS
-            user_defined_ellipsoid = true;
             break;
           case 4326:  // GCS_WGS_84
             gcs_code = GEO_GCS_WGS84;
@@ -1235,7 +1233,7 @@ bool GeoProjectionConverter::set_projection_from_geo_keys(
             break;
           case 4140:  // Datum_NAD83_CSRS
           case 4617:  // Datum_NAD83_CSRS
-            datum_code = GEO_GCS_NAD83_CSRS;
+            //datum_code = GEO_GCS_NAD83_CSRS;
             break;
           case 4759:  // NAD83_2007
           case 4893:  // NAD83_2007_3D
@@ -1321,28 +1319,27 @@ bool GeoProjectionConverter::set_projection_from_geo_keys(
       case 2050:  // GeogGeodeticDatumGeoKey
         switch (geo_keys[i].value_offset) {
           case 32767:  // user-defined GCS
-            user_defined_ellipsoid = true;
             break;
           case 6326:  // Datum_WGS84
-            datum_code = GEO_GCS_WGS84;
+            //datum_code = GEO_GCS_WGS84;
             break;
           case 6269:  // Datum_North_American_Datum_1983
-            datum_code = GEO_GCS_NAD83;
+            //datum_code = GEO_GCS_NAD83;
             break;
           case 6322:  // Datum_WGS72
-            datum_code = GEO_GCS_WGS72;
+            //datum_code = GEO_GCS_WGS72;
             break;
           case 6267:  // Datum_North_American_Datum_1927
-            datum_code = GEO_GCS_NAD27;
+            //datum_code = GEO_GCS_NAD27;
             break;
           case 6283:  // Datum_Geocentric_Datum_of_Australia_1994
-            datum_code = GEO_GCS_GDA94;
+            //datum_code = GEO_GCS_GDA94;
             break;
           case 9844:  // Datum_Geocentric_Datum_of_Australia_2020
-            datum_code = GEO_GCS_GDA94;
+            //datum_code = GEO_GCS_GDA94;
             break;
           case 6140:  // Datum_NAD83_CSRS
-            datum_code = GEO_GCS_NAD83_CSRS;
+            //datum_code = GEO_GCS_NAD83_CSRS;
             break;
           case 6030:  // DatumE_WGS84
             ellipsoid = GEO_ELLIPSOID_WGS84;
@@ -1351,10 +1348,10 @@ bool GeoProjectionConverter::set_projection_from_geo_keys(
             ellipsoid = GEO_ELLIPSOID_GRS1980;
             break;
           case 6167:  // Datum_SWEREF99
-            datum_code = GEO_GCS_SWEREF99;
+            //datum_code = GEO_GCS_SWEREF99;
             break;
           case 6619:  // Datum_NZGD2000
-            datum_code = GEO_GCS_NZGD2000;
+            //datum_code = GEO_GCS_NZGD2000;
             break;
           case 6202:  // Datum_Australian_Geodetic_Datum_1966
           case 6203:  // Datum_Australian_Geodetic_Datum_1984
@@ -1697,7 +1694,7 @@ bool GeoProjectionConverter::GeoTiffInfo(
     auto geoDoubleGet = [&](const int offs = 0, const int decimals = 10) -> std::string {
       if (doubleparams) {
         try {
-          return DoubleToString(doubleparams[geokeye->value_offset + offs], decimals);
+          return DoubleToString(doubleparams[geokeye->value_offset + offs], decimals, true);
         } catch (...) {
           return "?";
         }
@@ -1759,7 +1756,7 @@ bool GeoProjectionConverter::GeoTiffInfo(
           value += "]";
           break;
         case 3072: {  // ProjectedCSTypeGeoKey
-          char* data = (char*)malloc(280);
+          char* data = (char*)malloc_las(280);
           if (set_ProjectedCSTypeGeoKey(geokeye->value_offset, data)) {
             horizontal_epsg = get_ProjLinearUnitsGeoKey();
             value = std::string(data);
@@ -1787,7 +1784,7 @@ bool GeoProjectionConverter::GeoTiffInfo(
           break;
         case 4096:  // VerticalCSTypeGeoKey
           if (!mapFindAssign(geokeye->value_offset, mapVerticalCSTypeGeoKey)) {
-            char* data = (char*)malloc(200);
+            char* data = (char*)malloc_las(200);
             if (set_VerticalCSTypeGeoKey(geokeye->value_offset, data, 200)) {
               value = std::string(data);
             }
@@ -1818,481 +1815,515 @@ bool GeoProjectionConverter::get_geo_keys_from_projection(
   num_geo_double_params = 0;
   GeoProjectionParameters* projection = (source ? source_projection : target_projection);
   if (projection) {
+    int idx = 0;
     unsigned short vertical_geokey = get_VerticalCSTypeGeoKey();
     if (projection->type == GEO_PROJECTION_UTM || projection->type == GEO_PROJECTION_LCC || projection->type == GEO_PROJECTION_TM ||
         projection->type == GEO_PROJECTION_AEAC || projection->type == GEO_PROJECTION_HOM || projection->type == GEO_PROJECTION_OS) {
       unsigned short geokey = get_ProjectedCSTypeGeoKey(source);
       if (geokey && geokey != 32767) {
-        num_geo_keys = 4 + (vertical_geokey ? 1 : 0);
-        (*geo_keys) = (GeoProjectionGeoKeys*)malloc(sizeof(GeoProjectionGeoKeys) * num_geo_keys);
+        num_geo_keys = 5 + (vertical_geokey ? 1 : 0);
+        (*geo_keys) = (GeoProjectionGeoKeys*)malloc_las(sizeof(GeoProjectionGeoKeys) * num_geo_keys);
         (*geo_double_params) = 0;
-
         // projected coordinates
-        (*geo_keys)[0].key_id = 1024;  // GTModelTypeGeoKey
-        (*geo_keys)[0].tiff_tag_location = 0;
-        (*geo_keys)[0].count = 1;
-        (*geo_keys)[0].value_offset = 1;  // ModelTypeProjected
-
+        (*geo_keys)[idx].key_id = 1024;  // GTModelTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 1;  // ModelTypeProjected
+        idx++;
+        // raster type: pixel is point/area
+        (*geo_keys)[idx].key_id = 1025;  // GTRasterTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_GTRasterTypeGeoKey();
+        idx++;
         // projection
-        (*geo_keys)[1].key_id = 3072;  // ProjectedCSTypeGeoKey
-        (*geo_keys)[1].tiff_tag_location = 0;
-        (*geo_keys)[1].count = 1;
-        (*geo_keys)[1].value_offset = geokey;
-
+        (*geo_keys)[idx].key_id = 3072;  // ProjectedCSTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = geokey;
+        idx++;
         // horizontal units
-        (*geo_keys)[2].key_id = 3076;  // ProjLinearUnitsGeoKey
-        (*geo_keys)[2].tiff_tag_location = 0;
-        (*geo_keys)[2].count = 1;
-        (*geo_keys)[2].value_offset = get_ProjLinearUnitsGeoKey(source);
-
+        (*geo_keys)[idx].key_id = 3076;  // ProjLinearUnitsGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_ProjLinearUnitsGeoKey(source);
+        idx++;
         // vertical units
-        (*geo_keys)[3].key_id = 4099;  // VerticalUnitsGeoKey
-        (*geo_keys)[3].tiff_tag_location = 0;
-        (*geo_keys)[3].count = 1;
-        (*geo_keys)[3].value_offset = get_VerticalUnitsGeoKey(source);
-
+        (*geo_keys)[idx].key_id = 4099;  // VerticalUnitsGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_VerticalUnitsGeoKey(source);
+        idx++;
         if (vertical_geokey) {
           // vertical datum
-          (*geo_keys)[4].key_id = 4096;  // VerticalCSTypeGeoKey
-          (*geo_keys)[4].tiff_tag_location = 0;
-          (*geo_keys)[4].count = 1;
-          (*geo_keys)[4].value_offset = vertical_geokey;
+          (*geo_keys)[idx].key_id = 4096;  // VerticalCSTypeGeoKey
+          (*geo_keys)[idx].tiff_tag_location = 0;
+          (*geo_keys)[idx].count = 1;
+          (*geo_keys)[idx].value_offset = vertical_geokey;
+          idx++;
         }
         return true;
       } else if (projection->type == GEO_PROJECTION_LCC) {
         GeoProjectionParametersLCC* lcc = (GeoProjectionParametersLCC*)projection;
-
-        num_geo_keys = 12 + (vertical_geokey ? 1 : 0);
-        (*geo_keys) = (GeoProjectionGeoKeys*)malloc(sizeof(GeoProjectionGeoKeys) * num_geo_keys);
+        num_geo_keys = 13 + (vertical_geokey ? 1 : 0);
+        (*geo_keys) = (GeoProjectionGeoKeys*)malloc_las(sizeof(GeoProjectionGeoKeys) * num_geo_keys);
         num_geo_double_params = 6;
-        (*geo_double_params) = (double*)malloc(sizeof(double) * num_geo_double_params);
-
+        (*geo_double_params) = (double*)malloc_las(sizeof(double) * num_geo_double_params);
         // projected coordinates
-        (*geo_keys)[0].key_id = 1024;  // GTModelTypeGeoKey
-        (*geo_keys)[0].tiff_tag_location = 0;
-        (*geo_keys)[0].count = 1;
-        (*geo_keys)[0].value_offset = 1;  // ModelTypeProjected
-
+        (*geo_keys)[idx].key_id = 1024;  // GTModelTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 1;  // ModelTypeProjected
+        idx++;
+        // raster type: pixel is point/area
+        (*geo_keys)[idx].key_id = 1025;  // GTRasterTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_GTRasterTypeGeoKey();
+        idx++;
         // user-defined custom LCC projection
-        (*geo_keys)[1].key_id = 3072;  // ProjectedCSTypeGeoKey
-        (*geo_keys)[1].tiff_tag_location = 0;
-        (*geo_keys)[1].count = 1;
-        (*geo_keys)[1].value_offset = 32767;  // user-defined
-
+        (*geo_keys)[idx].key_id = 3072;  // ProjectedCSTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 32767;  // user-defined
+        idx++;
         // which projection do we use
-        (*geo_keys)[2].key_id = 3075;  // ProjCoordTransGeoKey
-        (*geo_keys)[2].tiff_tag_location = 0;
-        (*geo_keys)[2].count = 1;
-        (*geo_keys)[2].value_offset = 8;  // CT_LambertConfConic_2SP
-
+        (*geo_keys)[idx].key_id = 3075;  // ProjCoordTransGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 8;  // CT_LambertConfConic_2SP
+        idx++;
         // which units do we use
-        (*geo_keys)[3].key_id = 3076;  // ProjCoordTransGeoKey
-        (*geo_keys)[3].tiff_tag_location = 0;
-        (*geo_keys)[3].count = 1;
-        (*geo_keys)[3].value_offset = get_ProjLinearUnitsGeoKey(source);
-
+        (*geo_keys)[idx].key_id = 3076;  // ProjCoordTransGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_ProjLinearUnitsGeoKey(source);
+        idx++;
         // here come the 6 double parameters
-
-        (*geo_keys)[4].key_id = 3078;  // ProjStdParallel1GeoKey
-        (*geo_keys)[4].tiff_tag_location = 34736;
-        (*geo_keys)[4].count = 1;
-        (*geo_keys)[4].value_offset = 0;
+        (*geo_keys)[idx].key_id = 3078;  // ProjStdParallel1GeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 0;
         (*geo_double_params)[0] = lcc->lcc_first_std_parallel_degree;
-
-        (*geo_keys)[5].key_id = 3079;  // ProjStdParallel2GeoKey
-        (*geo_keys)[5].tiff_tag_location = 34736;
-        (*geo_keys)[5].count = 1;
-        (*geo_keys)[5].value_offset = 1;
+        idx++;
+        (*geo_keys)[idx].key_id = 3079;  // ProjStdParallel2GeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 1;
         (*geo_double_params)[1] = lcc->lcc_second_std_parallel_degree;
-
-        (*geo_keys)[6].key_id = 3088;  // ProjCenterLongGeoKey
-        (*geo_keys)[6].tiff_tag_location = 34736;
-        (*geo_keys)[6].count = 1;
-        (*geo_keys)[6].value_offset = 2;
+        idx++;
+        (*geo_keys)[idx].key_id = 3088;  // ProjCenterLongGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 2;
         (*geo_double_params)[2] = lcc->lcc_long_meridian_degree;
-
-        (*geo_keys)[7].key_id = 3081;  // ProjNatOriginLatGeoKey
-        (*geo_keys)[7].tiff_tag_location = 34736;
-        (*geo_keys)[7].count = 1;
-        (*geo_keys)[7].value_offset = 3;
+        idx++;
+        (*geo_keys)[idx].key_id = 3081;  // ProjNatOriginLatGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 3;
         (*geo_double_params)[3] = lcc->lcc_lat_origin_degree;
-
-        (*geo_keys)[8].key_id = 3082;  // ProjFalseEastingGeoKey
-        (*geo_keys)[8].tiff_tag_location = 34736;
-        (*geo_keys)[8].count = 1;
-        (*geo_keys)[8].value_offset = 4;
+        idx++;
+        (*geo_keys)[idx].key_id = 3082;  // ProjFalseEastingGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 4;
         if (source)
           (*geo_double_params)[4] = lcc->lcc_false_easting_meter / coordinates2meter;
         else
           (*geo_double_params)[4] = lcc->lcc_false_easting_meter * meter2coordinates;
-
-        (*geo_keys)[9].key_id = 3083;  // ProjFalseNorthingGeoKey
-        (*geo_keys)[9].tiff_tag_location = 34736;
-        (*geo_keys)[9].count = 1;
-        (*geo_keys)[9].value_offset = 5;
+        idx++;
+        (*geo_keys)[idx].key_id = 3083;  // ProjFalseNorthingGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 5;
         if (source)
           (*geo_double_params)[5] = lcc->lcc_false_northing_meter / coordinates2meter;
         else
           (*geo_double_params)[5] = lcc->lcc_false_northing_meter * meter2coordinates;
-
+        idx++;
         // GCS used with custom LLC projection
-        (*geo_keys)[10].key_id = 2048;  // GeographicTypeGeoKey
-        (*geo_keys)[10].tiff_tag_location = 0;
-        (*geo_keys)[10].count = 1;
-        (*geo_keys)[10].value_offset = get_GeographicTypeGeoKey();
-
+        (*geo_keys)[idx].key_id = 2048;  // GeographicTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_GeographicTypeGeoKey();
+        idx++;
         // vertical units
-        (*geo_keys)[11].key_id = 4099;  // VerticalUnitsGeoKey
-        (*geo_keys)[11].tiff_tag_location = 0;
-        (*geo_keys)[11].count = 1;
-        (*geo_keys)[11].value_offset = get_VerticalUnitsGeoKey(source);
-
+        (*geo_keys)[idx].key_id = 4099;  // VerticalUnitsGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_VerticalUnitsGeoKey(source);
+        idx++;
         if (vertical_geokey) {
           // vertical datum
-          (*geo_keys)[12].key_id = 4096;  // VerticalCSTypeGeoKey
-          (*geo_keys)[12].tiff_tag_location = 0;
-          (*geo_keys)[12].count = 1;
-          (*geo_keys)[12].value_offset = vertical_geokey;
+          (*geo_keys)[idx].key_id = 4096;  // VerticalCSTypeGeoKey
+          (*geo_keys)[idx].tiff_tag_location = 0;
+          (*geo_keys)[idx].count = 1;
+          (*geo_keys)[idx].value_offset = vertical_geokey;
         }
         return true;
       } else if (projection->type == GEO_PROJECTION_TM) {
         GeoProjectionParametersTM* tm = (GeoProjectionParametersTM*)projection;
-
-        num_geo_keys = 11 + (vertical_geokey ? 1 : 0);
-        (*geo_keys) = (GeoProjectionGeoKeys*)malloc(sizeof(GeoProjectionGeoKeys) * num_geo_keys);
+        num_geo_keys = 12 + (vertical_geokey ? 1 : 0);
+        (*geo_keys) = (GeoProjectionGeoKeys*)malloc_las(sizeof(GeoProjectionGeoKeys) * num_geo_keys);
         num_geo_double_params = 5;
-        (*geo_double_params) = (double*)malloc(sizeof(double) * num_geo_double_params);
-
+        (*geo_double_params) = (double*)malloc_las(sizeof(double) * num_geo_double_params);
+        idx++;
         // projected coordinates
-        (*geo_keys)[0].key_id = 1024;  // GTModelTypeGeoKey
-        (*geo_keys)[0].tiff_tag_location = 0;
-        (*geo_keys)[0].count = 1;
-        (*geo_keys)[0].value_offset = 1;  // ModelTypeProjected
-
+        (*geo_keys)[idx].key_id = 1024;  // GTModelTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 1;  // ModelTypeProjected
+        idx++;
+        // raster type: pixel is point/area
+        (*geo_keys)[idx].key_id = 1025;  // GTRasterTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_GTRasterTypeGeoKey();
+        idx++;
         // user-defined custom TM projection
-        (*geo_keys)[1].key_id = 3072;  // ProjectedCSTypeGeoKey
-        (*geo_keys)[1].tiff_tag_location = 0;
-        (*geo_keys)[1].count = 1;
-        (*geo_keys)[1].value_offset = 32767;  // user-defined
-
+        (*geo_keys)[idx].key_id = 3072;  // ProjectedCSTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 32767;  // user-defined
+        idx++;
         // which projection do we use
-        (*geo_keys)[2].key_id = 3075;  // ProjCoordTransGeoKey
-        (*geo_keys)[2].tiff_tag_location = 0;
-        (*geo_keys)[2].count = 1;
-        (*geo_keys)[2].value_offset = 1;  // CT_TransverseMercator
-
+        (*geo_keys)[idx].key_id = 3075;  // ProjCoordTransGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 1;  // CT_TransverseMercator
+        idx++;
         // which units do we use
-        (*geo_keys)[3].key_id = 3076;  // ProjCoordTransGeoKey
-        (*geo_keys)[3].tiff_tag_location = 0;
-        (*geo_keys)[3].count = 1;
-        (*geo_keys)[3].value_offset = get_ProjLinearUnitsGeoKey(source);
-
+        (*geo_keys)[idx].key_id = 3076;  // ProjCoordTransGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_ProjLinearUnitsGeoKey(source);
+        idx++;
         // here come the 5 double parameters
-
-        (*geo_keys)[4].key_id = 3088;  // ProjCenterLongGeoKey
-        (*geo_keys)[4].tiff_tag_location = 34736;
-        (*geo_keys)[4].count = 1;
-        (*geo_keys)[4].value_offset = 0;
+        (*geo_keys)[idx].key_id = 3088;  // ProjCenterLongGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 0;
         (*geo_double_params)[0] = tm->tm_long_meridian_degree;
-
-        (*geo_keys)[5].key_id = 3081;  // ProjNatOriginLatGeoKey
-        (*geo_keys)[5].tiff_tag_location = 34736;
-        (*geo_keys)[5].count = 1;
-        (*geo_keys)[5].value_offset = 1;
+        idx++;
+        (*geo_keys)[idx].key_id = 3081;  // ProjNatOriginLatGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 1;
         (*geo_double_params)[1] = tm->tm_lat_origin_degree;
-
-        (*geo_keys)[6].key_id = 3092;  // ProjScaleAtNatOriginGeoKey
-        (*geo_keys)[6].tiff_tag_location = 34736;
-        (*geo_keys)[6].count = 1;
-        (*geo_keys)[6].value_offset = 2;
+        idx++;
+        (*geo_keys)[idx].key_id = 3092;  // ProjScaleAtNatOriginGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 2;
         (*geo_double_params)[2] = tm->tm_scale_factor;
-
-        (*geo_keys)[7].key_id = 3082;  // ProjFalseEastingGeoKey
-        (*geo_keys)[7].tiff_tag_location = 34736;
-        (*geo_keys)[7].count = 1;
-        (*geo_keys)[7].value_offset = 3;
+        idx++;
+        (*geo_keys)[idx].key_id = 3082;  // ProjFalseEastingGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 3;
         if (source)
           (*geo_double_params)[3] = tm->tm_false_easting_meter / coordinates2meter;
         else
           (*geo_double_params)[3] = tm->tm_false_easting_meter * meter2coordinates;
-
-        (*geo_keys)[8].key_id = 3083;  // ProjFalseNorthingGeoKey
-        (*geo_keys)[8].tiff_tag_location = 34736;
-        (*geo_keys)[8].count = 1;
-        (*geo_keys)[8].value_offset = 4;
+        idx++;
+        (*geo_keys)[idx].key_id = 3083;  // ProjFalseNorthingGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 4;
         if (source)
           (*geo_double_params)[4] = tm->tm_false_northing_meter / coordinates2meter;
         else
           (*geo_double_params)[4] = tm->tm_false_northing_meter * meter2coordinates;
-
+        idx++;
         // GCS used with custom TM projection
-        (*geo_keys)[9].key_id = 2048;  // GeographicTypeGeoKey
-        (*geo_keys)[9].tiff_tag_location = 0;
-        (*geo_keys)[9].count = 1;
-        (*geo_keys)[9].value_offset = get_GeographicTypeGeoKey();
-
+        (*geo_keys)[idx].key_id = 2048;  // GeographicTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_GeographicTypeGeoKey();
+        idx++;
         // vertical units
-        (*geo_keys)[10].key_id = 4099;  // VerticalUnitsGeoKey
-        (*geo_keys)[10].tiff_tag_location = 0;
-        (*geo_keys)[10].count = 1;
-        (*geo_keys)[10].value_offset = get_VerticalUnitsGeoKey(source);
-
+        (*geo_keys)[idx].key_id = 4099;  // VerticalUnitsGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_VerticalUnitsGeoKey(source);
+        idx++;
         if (vertical_geokey) {
           // vertical datum
-          (*geo_keys)[11].key_id = 4096;  // VerticalCSTypeGeoKey
-          (*geo_keys)[11].tiff_tag_location = 0;
-          (*geo_keys)[11].count = 1;
-          (*geo_keys)[11].value_offset = vertical_geokey;
+          (*geo_keys)[idx].key_id = 4096;  // VerticalCSTypeGeoKey
+          (*geo_keys)[idx].tiff_tag_location = 0;
+          (*geo_keys)[idx].count = 1;
+          (*geo_keys)[idx].value_offset = vertical_geokey;
         }
         return true;
       } else if (projection->type == GEO_PROJECTION_AEAC) {
         GeoProjectionParametersAEAC* aeac = (GeoProjectionParametersAEAC*)projection;
-
-        num_geo_keys = 12 + (vertical_geokey ? 1 : 0);
-        (*geo_keys) = (GeoProjectionGeoKeys*)malloc(sizeof(GeoProjectionGeoKeys) * num_geo_keys);
+        num_geo_keys = 13 + (vertical_geokey ? 1 : 0);
+        (*geo_keys) = (GeoProjectionGeoKeys*)malloc_las(sizeof(GeoProjectionGeoKeys) * num_geo_keys);
         num_geo_double_params = 6;
-        (*geo_double_params) = (double*)malloc(sizeof(double) * num_geo_double_params);
-
+        (*geo_double_params) = (double*)malloc_las(sizeof(double) * num_geo_double_params);
         // projected coordinates
-        (*geo_keys)[0].key_id = 1024;  // GTModelTypeGeoKey
-        (*geo_keys)[0].tiff_tag_location = 0;
-        (*geo_keys)[0].count = 1;
-        (*geo_keys)[0].value_offset = 1;  // ModelTypeProjected
-
+        (*geo_keys)[idx].key_id = 1024;  // GTModelTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 1;  // ModelTypeProjected
+        idx++;
+        // raster type: pixel is point/area
+        (*geo_keys)[idx].key_id = 1025;  // GTRasterTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_GTRasterTypeGeoKey();
+        idx++;
         // user-defined custom AEAC projection
-        (*geo_keys)[1].key_id = 3072;  // ProjectedCSTypeGeoKey
-        (*geo_keys)[1].tiff_tag_location = 0;
-        (*geo_keys)[1].count = 1;
-        (*geo_keys)[1].value_offset = 32767;  // user-defined
-
+        (*geo_keys)[idx].key_id = 3072;  // ProjectedCSTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 32767;  // user-defined
+        idx++;
         // which projection do we use
-        (*geo_keys)[2].key_id = 3075;  // ProjCoordTransGeoKey
-        (*geo_keys)[2].tiff_tag_location = 0;
-        (*geo_keys)[2].count = 1;
-        (*geo_keys)[2].value_offset = 11;  // CT_AlbersEqualArea
-
+        (*geo_keys)[idx].key_id = 3075;  // ProjCoordTransGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 11;  // CT_AlbersEqualArea
+        idx++;
         // which units do we use
-        (*geo_keys)[3].key_id = 3076;  // ProjCoordTransGeoKey
-        (*geo_keys)[3].tiff_tag_location = 0;
-        (*geo_keys)[3].count = 1;
-        (*geo_keys)[3].value_offset = get_ProjLinearUnitsGeoKey(source);
-
+        (*geo_keys)[idx].key_id = 3076;  // ProjCoordTransGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_ProjLinearUnitsGeoKey(source);
+        idx++;
         // here come the 6 double parameters
-
-        (*geo_keys)[4].key_id = 3078;  // ProjStdParallel1GeoKey
-        (*geo_keys)[4].tiff_tag_location = 34736;
-        (*geo_keys)[4].count = 1;
-        (*geo_keys)[4].value_offset = 0;
+        (*geo_keys)[idx].key_id = 3078;  // ProjStdParallel1GeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 0;
         (*geo_double_params)[0] = aeac->aeac_first_std_parallel_degree;
-
-        (*geo_keys)[5].key_id = 3079;  // ProjStdParallel2GeoKey
-        (*geo_keys)[5].tiff_tag_location = 34736;
-        (*geo_keys)[5].count = 1;
-        (*geo_keys)[5].value_offset = 1;
+        idx++;
+        (*geo_keys)[idx].key_id = 3079;  // ProjStdParallel2GeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 1;
         (*geo_double_params)[1] = aeac->aeac_second_std_parallel_degree;
-
-        (*geo_keys)[6].key_id = 3088;  // ProjCenterLongGeoKey
-        (*geo_keys)[6].tiff_tag_location = 34736;
-        (*geo_keys)[6].count = 1;
-        (*geo_keys)[6].value_offset = 2;
+        idx++;
+        (*geo_keys)[idx].key_id = 3088;  // ProjCenterLongGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 2;
         (*geo_double_params)[2] = aeac->aeac_longitude_of_center_degree;
-
-        (*geo_keys)[7].key_id = 3081;  // ProjCenterLatGeoKey
-        (*geo_keys)[7].tiff_tag_location = 34736;
-        (*geo_keys)[7].count = 1;
-        (*geo_keys)[7].value_offset = 3;
+        idx++;
+        (*geo_keys)[idx].key_id = 3081;  // ProjCenterLatGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 3;
         (*geo_double_params)[3] = aeac->aeac_latitude_of_center_degree;
-
-        (*geo_keys)[8].key_id = 3082;  // ProjFalseEastingGeoKey
-        (*geo_keys)[8].tiff_tag_location = 34736;
-        (*geo_keys)[8].count = 1;
-        (*geo_keys)[8].value_offset = 4;
+        idx++;
+        (*geo_keys)[idx].key_id = 3082;  // ProjFalseEastingGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 4;
         if (source)
           (*geo_double_params)[4] = aeac->aeac_false_easting_meter / coordinates2meter;
         else
           (*geo_double_params)[4] = aeac->aeac_false_easting_meter * meter2coordinates;
-
-        (*geo_keys)[9].key_id = 3083;  // ProjFalseNorthingGeoKey
-        (*geo_keys)[9].tiff_tag_location = 34736;
-        (*geo_keys)[9].count = 1;
-        (*geo_keys)[9].value_offset = 5;
+        idx++;
+        (*geo_keys)[idx].key_id = 3083;  // ProjFalseNorthingGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 5;
         if (source)
           (*geo_double_params)[5] = aeac->aeac_false_northing_meter / coordinates2meter;
         else
           (*geo_double_params)[5] = aeac->aeac_false_northing_meter * meter2coordinates;
-
+        idx++;
         // GCS used with custom AEAC projection
-        (*geo_keys)[10].key_id = 2048;  // GeographicTypeGeoKey
-        (*geo_keys)[10].tiff_tag_location = 0;
-        (*geo_keys)[10].count = 1;
-        (*geo_keys)[10].value_offset = get_GeographicTypeGeoKey();
-
+        (*geo_keys)[idx].key_id = 2048;  // GeographicTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_GeographicTypeGeoKey();
+        idx++;
         // vertical units
-        (*geo_keys)[11].key_id = 4099;  // VerticalUnitsGeoKey
-        (*geo_keys)[11].tiff_tag_location = 0;
-        (*geo_keys)[11].count = 1;
-        (*geo_keys)[11].value_offset = get_VerticalUnitsGeoKey(source);
-
+        (*geo_keys)[idx].key_id = 4099;  // VerticalUnitsGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_VerticalUnitsGeoKey(source);
+        idx++;
         if (vertical_geokey) {
           // vertical datum
-          (*geo_keys)[12].key_id = 4096;  // VerticalCSTypeGeoKey
-          (*geo_keys)[12].tiff_tag_location = 0;
-          (*geo_keys)[12].count = 1;
-          (*geo_keys)[12].value_offset = vertical_geokey;
+          (*geo_keys)[idx].key_id = 4096;  // VerticalCSTypeGeoKey
+          (*geo_keys)[idx].tiff_tag_location = 0;
+          (*geo_keys)[idx].count = 1;
+          (*geo_keys)[idx].value_offset = vertical_geokey;
+          idx++;
         }
         return true;
       } else if (projection->type == GEO_PROJECTION_HOM) {
         GeoProjectionParametersHOM* hom = (GeoProjectionParametersHOM*)projection;
-
-        num_geo_keys = 13 + (vertical_geokey ? 1 : 0);
-        (*geo_keys) = (GeoProjectionGeoKeys*)malloc(sizeof(GeoProjectionGeoKeys) * num_geo_keys);
+        num_geo_keys = 14 + (vertical_geokey ? 1 : 0);
+        (*geo_keys) = (GeoProjectionGeoKeys*)malloc_las(sizeof(GeoProjectionGeoKeys) * num_geo_keys);
         num_geo_double_params = 7;
-        (*geo_double_params) = (double*)malloc(sizeof(double) * num_geo_double_params);
-
+        (*geo_double_params) = (double*)malloc_las(sizeof(double) * num_geo_double_params);
         // projected coordinates
-        (*geo_keys)[0].key_id = 1024;  // GTModelTypeGeoKey
-        (*geo_keys)[0].tiff_tag_location = 0;
-        (*geo_keys)[0].count = 1;
-        (*geo_keys)[0].value_offset = 1;  // ModelTypeProjected
-
+        (*geo_keys)[idx].key_id = 1024;  // GTModelTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 1;  // ModelTypeProjected
+        idx++;
+        // raster type: pixel is point/area
+        (*geo_keys)[idx].key_id = 1025;  // GTRasterTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_GTRasterTypeGeoKey();
+        idx++;
         // user-defined custom HOM projection
-        (*geo_keys)[1].key_id = 3072;  // ProjectedCSTypeGeoKey
-        (*geo_keys)[1].tiff_tag_location = 0;
-        (*geo_keys)[1].count = 1;
-        (*geo_keys)[1].value_offset = 32767;  // user-defined
-
+        (*geo_keys)[idx].key_id = 3072;  // ProjectedCSTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 32767;  // user-defined
+        idx++;
         // which projection do we use
-        (*geo_keys)[2].key_id = 3075;  // ProjCoordTransGeoKey
-        (*geo_keys)[2].tiff_tag_location = 0;
-        (*geo_keys)[2].count = 1;
-        (*geo_keys)[2].value_offset = 3;  // CT_ObliqueMercator
-
+        (*geo_keys)[idx].key_id = 3075;  // ProjCoordTransGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 3;  // CT_ObliqueMercator
+        idx++;
         // which units do we use
-        (*geo_keys)[3].key_id = 3076;  // ProjCoordTransGeoKey
-        (*geo_keys)[3].tiff_tag_location = 0;
-        (*geo_keys)[3].count = 1;
-        (*geo_keys)[3].value_offset = get_ProjLinearUnitsGeoKey(source);
-
+        (*geo_keys)[idx].key_id = 3076;  // ProjCoordTransGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_ProjLinearUnitsGeoKey(source);
+        idx++;
         // here come the 7 double parameters
-
-        (*geo_keys)[4].key_id = 3088;  // ProjCenterLongGeoKey
-        (*geo_keys)[4].tiff_tag_location = 34736;
-        (*geo_keys)[4].count = 1;
-        (*geo_keys)[4].value_offset = 0;
+        (*geo_keys)[idx].key_id = 3088;  // ProjCenterLongGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 0;
         (*geo_double_params)[0] = hom->hom_longitude_of_center_degree;
-
-        (*geo_keys)[5].key_id = 3089;  // ProjCenterLatGeoKey
-        (*geo_keys)[5].tiff_tag_location = 34736;
-        (*geo_keys)[5].count = 1;
-        (*geo_keys)[5].value_offset = 1;
+        idx++;
+        (*geo_keys)[idx].key_id = 3089;  // ProjCenterLatGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 1;
         (*geo_double_params)[1] = hom->hom_latitude_of_center_degree;
-
-        (*geo_keys)[6].key_id = 3094;  // ProjAzimuthAngleGeoKey
-        (*geo_keys)[6].tiff_tag_location = 34736;
-        (*geo_keys)[6].count = 1;
-        (*geo_keys)[6].value_offset = 2;
+        idx++;
+        (*geo_keys)[idx].key_id = 3094;  // ProjAzimuthAngleGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 2;
         (*geo_double_params)[2] = hom->hom_azimuth_degree;
-
-        (*geo_keys)[7].key_id = 3096;  // ProjRectifiedGridAngleGeoKey
-        (*geo_keys)[7].tiff_tag_location = 34736;
-        (*geo_keys)[7].count = 1;
-        (*geo_keys)[7].value_offset = 3;
+        idx++;
+        (*geo_keys)[idx].key_id = 3096;  // ProjRectifiedGridAngleGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 3;
         (*geo_double_params)[3] = hom->hom_rectified_grid_angle_degree;
-
-        (*geo_keys)[8].key_id = 3093;  // ProjScaleAtCenterGeoKey
-        (*geo_keys)[8].tiff_tag_location = 34736;
-        (*geo_keys)[8].count = 1;
-        (*geo_keys)[8].value_offset = 4;
+        idx++;
+        (*geo_keys)[idx].key_id = 3093;  // ProjScaleAtCenterGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 4;
         (*geo_double_params)[4] = hom->hom_scale_factor;
-
-        (*geo_keys)[9].key_id = 3082;  // ProjFalseEastingGeoKey
-        (*geo_keys)[9].tiff_tag_location = 34736;
-        (*geo_keys)[9].count = 1;
-        (*geo_keys)[9].value_offset = 5;
+        idx++;
+        (*geo_keys)[idx].key_id = 3082;  // ProjFalseEastingGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 5;
         if (source)
           (*geo_double_params)[5] = hom->hom_false_easting_meter / coordinates2meter;
         else
           (*geo_double_params)[5] = hom->hom_false_easting_meter * meter2coordinates;
-
-        (*geo_keys)[10].key_id = 3083;  // ProjFalseNorthingGeoKey
-        (*geo_keys)[10].tiff_tag_location = 34736;
-        (*geo_keys)[10].count = 1;
-        (*geo_keys)[10].value_offset = 6;
+        idx++;
+        (*geo_keys)[idx].key_id = 3083;  // ProjFalseNorthingGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 34736;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = 6;
         if (source)
           (*geo_double_params)[6] = hom->hom_false_northing_meter / coordinates2meter;
         else
           (*geo_double_params)[6] = hom->hom_false_northing_meter * meter2coordinates;
-
+        idx++;
         // GCS used with custom HOM projection
-        (*geo_keys)[11].key_id = 2048;  // GeographicTypeGeoKey
-        (*geo_keys)[11].tiff_tag_location = 0;
-        (*geo_keys)[11].count = 1;
-        (*geo_keys)[11].value_offset = get_GeographicTypeGeoKey();
-
+        (*geo_keys)[idx].key_id = 2048;  // GeographicTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_GeographicTypeGeoKey();
+        idx++;
         // vertical units
-        (*geo_keys)[12].key_id = 4099;  // VerticalUnitsGeoKey
-        (*geo_keys)[12].tiff_tag_location = 0;
-        (*geo_keys)[12].count = 1;
-        (*geo_keys)[12].value_offset = get_VerticalUnitsGeoKey(source);
-
+        (*geo_keys)[idx].key_id = 4099;  // VerticalUnitsGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = get_VerticalUnitsGeoKey(source);
+        idx++;
         if (vertical_geokey) {
           // vertical datum
-          (*geo_keys)[13].key_id = 4096;  // VerticalCSTypeGeoKey
-          (*geo_keys)[13].tiff_tag_location = 0;
-          (*geo_keys)[13].count = 1;
-          (*geo_keys)[13].value_offset = vertical_geokey;
+          (*geo_keys)[idx].key_id = 4096;  // VerticalCSTypeGeoKey
+          (*geo_keys)[idx].tiff_tag_location = 0;
+          (*geo_keys)[idx].count = 1;
+          (*geo_keys)[idx].value_offset = vertical_geokey;
+          idx++;
         }
         return true;
       } else {
         LASMessage(LAS_WARNING, "get_geo_keys_from_projection for generic projection not implemented");
       }
     } else if (projection->type == GEO_PROJECTION_LAT_LONG || projection->type == GEO_PROJECTION_LONG_LAT) {
-      num_geo_keys = 3 + (vertical_geokey ? 1 : 0);
-      (*geo_keys) = (GeoProjectionGeoKeys*)malloc(sizeof(GeoProjectionGeoKeys) * num_geo_keys);
+      num_geo_keys = 4 + (vertical_geokey ? 1 : 0);
+      (*geo_keys) = (GeoProjectionGeoKeys*)malloc_las(sizeof(GeoProjectionGeoKeys) * num_geo_keys);
       (*geo_double_params) = 0;
-
       // projected coordinates
-      (*geo_keys)[0].key_id = 1024;  // GTModelTypeGeoKey
-      (*geo_keys)[0].tiff_tag_location = 0;
-      (*geo_keys)[0].count = 1;
-      (*geo_keys)[0].value_offset = 2;  // ModelTypeGeographic
-
+      (*geo_keys)[idx].key_id = 1024;  // GTModelTypeGeoKey
+      (*geo_keys)[idx].tiff_tag_location = 0;
+      (*geo_keys)[idx].count = 1;
+      (*geo_keys)[idx].value_offset = 2;  // ModelTypeGeographic
+      idx++;
+      // raster type: pixel is point/area
+      (*geo_keys)[idx].key_id = 1025;  // GTRasterTypeGeoKey
+      (*geo_keys)[idx].tiff_tag_location = 0;
+      (*geo_keys)[idx].count = 1;
+      (*geo_keys)[idx].value_offset = get_GTRasterTypeGeoKey();
+      idx++;
       // GCS used with latitude/longitude coordinates
-      (*geo_keys)[1].key_id = 2048;  // GeographicTypeGeoKey
-      (*geo_keys)[1].tiff_tag_location = 0;
-      (*geo_keys)[1].count = 1;
-      (*geo_keys)[1].value_offset = get_GeographicTypeGeoKey();
-
+      (*geo_keys)[idx].key_id = 2048;  // GeographicTypeGeoKey
+      (*geo_keys)[idx].tiff_tag_location = 0;
+      (*geo_keys)[idx].count = 1;
+      (*geo_keys)[idx].value_offset = get_GeographicTypeGeoKey();
+      idx++;
       // vertical units
-      (*geo_keys)[2].key_id = 4099;  // VerticalUnitsGeoKey
-      (*geo_keys)[2].tiff_tag_location = 0;
-      (*geo_keys)[2].count = 1;
-      (*geo_keys)[2].value_offset = get_VerticalUnitsGeoKey(source);
-
+      (*geo_keys)[idx].key_id = 4099;  // VerticalUnitsGeoKey
+      (*geo_keys)[idx].tiff_tag_location = 0;
+      (*geo_keys)[idx].count = 1;
+      (*geo_keys)[idx].value_offset = get_VerticalUnitsGeoKey(source);
+      idx++;
       if (vertical_geokey) {
         // vertical datum
-        (*geo_keys)[3].key_id = 4096;  // VerticalCSTypeGeoKey
-        (*geo_keys)[3].tiff_tag_location = 0;
-        (*geo_keys)[3].count = 1;
-        (*geo_keys)[3].value_offset = vertical_geokey;
+        (*geo_keys)[idx].key_id = 4096;  // VerticalCSTypeGeoKey
+        (*geo_keys)[idx].tiff_tag_location = 0;
+        (*geo_keys)[idx].count = 1;
+        (*geo_keys)[idx].value_offset = vertical_geokey;
+        idx++;
       }
       return true;
     } else if (projection->type == GEO_PROJECTION_ECEF) {
-      num_geo_keys = 2;
-      (*geo_keys) = (GeoProjectionGeoKeys*)malloc(sizeof(GeoProjectionGeoKeys) * num_geo_keys);
+      num_geo_keys = 3;
+      (*geo_keys) = (GeoProjectionGeoKeys*)malloc_las(sizeof(GeoProjectionGeoKeys) * num_geo_keys);
       (*geo_double_params) = 0;
-
       // projected coordinates
-      (*geo_keys)[0].key_id = 1024;  // GTModelTypeGeoKey
-      (*geo_keys)[0].tiff_tag_location = 0;
-      (*geo_keys)[0].count = 1;
-      (*geo_keys)[0].value_offset = 3;  // ModelTypeGeocentric
-
+      (*geo_keys)[idx].key_id = 1024;  // GTModelTypeGeoKey
+      (*geo_keys)[idx].tiff_tag_location = 0;
+      (*geo_keys)[idx].count = 1;
+      (*geo_keys)[idx].value_offset = 3;  // ModelTypeGeocentric
+      idx++;
+      // raster type: pixel is point/area
+      (*geo_keys)[idx].key_id = 1025;  // GTRasterTypeGeoKey
+      (*geo_keys)[idx].tiff_tag_location = 0;
+      (*geo_keys)[idx].count = 1;
+      (*geo_keys)[idx].value_offset = get_GTRasterTypeGeoKey();
+      idx++;
       // GCS used with earth centered coodinates
-      (*geo_keys)[1].key_id = 2048;  // GeographicTypeGeoKey
-      (*geo_keys)[1].tiff_tag_location = 0;
-      (*geo_keys)[1].count = 1;
-      (*geo_keys)[1].value_offset = get_GeographicTypeGeoKey();
+      (*geo_keys)[idx].key_id = 2048;  // GeographicTypeGeoKey
+      (*geo_keys)[idx].tiff_tag_location = 0;
+      (*geo_keys)[idx].count = 1;
+      (*geo_keys)[idx].value_offset = get_GeographicTypeGeoKey();
+      idx++;
       return true;
     }
   }
@@ -2408,6 +2439,8 @@ bool GeoProjectionConverter::set_projection_from_ogc_wkt(const char* ogc_wkt, ch
         LASMessage(LAS_VERBOSE, "source transverse projection [%s] set", source_projection->info().c_str());
         return true;
         break;
+      default:  // Unhandled values exist.
+        break;
     }
   } else {
     // no projection found - optional: check if the string contains a wkt1-GEOCCS
@@ -2514,7 +2547,7 @@ bool GeoProjectionConverter::get_ogc_wkt_from_projection(int& len, char** ogc_wk
   if (projection) {
     int n = 0;
     const int buffer_size = 4096;
-    char* string = (char*)malloc(buffer_size);
+    char* string = (char*)malloc_las(buffer_size);
     memset(string, 0, buffer_size);
     // maybe geocentric
     if (projection->type == GEO_PROJECTION_ECEF) {
@@ -2533,7 +2566,7 @@ bool GeoProjectionConverter::get_ogc_wkt_from_projection(int& len, char** ogc_wk
           epsg_name = get_epsg_name_from_pcs_file(projection->geokey);
         } else {
           len += (int)strlen(gcs_name) + 16;
-          epsg_name = (char*)malloc(len);
+          epsg_name = (char*)malloc_las(len);
           snprintf(epsg_name, len, "%s / %s", gcs_name, projection->name);
         }
         // maybe output a compound CRS
@@ -2942,7 +2975,7 @@ bool GeoProjectionConverter::get_prj_from_projection(int& len, char** prj, bool 
   if (projection) {
     int n = 0;
     const int buffer_size = 4096;
-    char* string = (char*)malloc(buffer_size);
+    char* string = (char*)malloc_las(buffer_size);
     memset(string, 0, buffer_size);
     // maybe geocentric
     if (projection->type == GEO_PROJECTION_ECEF) {
@@ -3227,7 +3260,7 @@ bool GeoProjectionConverter::get_proj4_string_from_projection(int& len, char** p
   if (projection) {
     int n = 0;
     const int buffer_size = 1024;
-    char* string = (char*)malloc(1024);
+    char* string = (char*)malloc_las(1024);
     memset(string, 0, 1024);
     if (projection->type == GEO_PROJECTION_UTM) {
       GeoProjectionParametersUTM* utm = (GeoProjectionParametersUTM*)projection;
@@ -3372,8 +3405,7 @@ short GeoProjectionConverter::get_GTRasterTypeGeoKey() const {
       }
     }
   }
-  return 0;
-  //  return 1; // assume RasterPixelIsArea
+  return 1; // default: RasterPixelIsArea
 }
 
 short GeoProjectionConverter::get_GeographicTypeGeoKey() const {
@@ -6795,6 +6827,15 @@ GeoProjectionConverter::GeoProjectionConverter() {
   is_proj_request = false;
   disable_messages = false;
   source_header_epsg = 0;
+
+  source_code = 0;
+  target_code = 0;
+  proj_source_string = nullptr;
+  proj_target_string = nullptr;
+  proj_source_json = nullptr;
+  proj_target_json = nullptr;
+  proj_source_wkt = nullptr;
+  proj_target_wkt = nullptr;
 }
 
 GeoProjectionConverter::~GeoProjectionConverter() {
@@ -6803,6 +6844,12 @@ GeoProjectionConverter::~GeoProjectionConverter() {
   delete ellipsoid;
   if (source_projection) delete source_projection;
   if (target_projection) delete target_projection;
+  if (proj_source_string) free((char*)proj_source_string);
+  if (proj_target_string) free((char*)proj_target_string);
+  if (proj_source_json) free((char*)proj_source_json);
+  if (proj_target_json) free((char*)proj_target_json);
+  if (proj_source_wkt) free((char*)proj_source_wkt);
+  if (proj_target_wkt) free((char*)proj_target_wkt);
 }
 
 void GeoProjectionConverter::parse(int argc, char* argv[]) {
@@ -7017,12 +7064,6 @@ void GeoProjectionConverter::parse(int argc, char* argv[]) {
     }
     // proj lib transformation
     else if (strcmp(argv[i], "-proj_epsg") == 0) {
-      unsigned int source_code = 0;
-      unsigned int target_code = 0;
-
-      // When using the PROJ functionalities, the PROJ lib must be loaded dynamically
-      load_proj_library(nullptr);
-
       if (argv[i + 1] != nullptr && argv[i + 1][0] != '\0' && argv[i + 1][0] != '-' && argv[i + 2] != nullptr && argv[i + 2][0] != '\0' &&
           argv[i + 2][0] != '-') {
         if (sscanf_las(argv[i + 1], "%u", &source_code) != 1) {
@@ -7031,7 +7072,6 @@ void GeoProjectionConverter::parse(int argc, char* argv[]) {
         if (sscanf_las(argv[i + 2], "%u", &target_code) != 1) {
           laserror("EPSG code for the target '%s' not valid", argv[i + 2]);
         }
-        set_proj_param_for_transformation_with_epsg(source_code, target_code);
         *argv[i] = '\0';
         *argv[i + 1] = '\0';
         *argv[i + 2] = '\0';
@@ -7040,7 +7080,6 @@ void GeoProjectionConverter::parse(int argc, char* argv[]) {
         if (sscanf_las(argv[i + 1], "%u", &target_code) != 1) {
           laserror("EPSG code from source '%s' not valid", argv[i + 1]);
         }
-        set_proj_crs_with_epsg(target_code, false);
         check_header_for_crs = true;
         *argv[i] = '\0';
         *argv[i + 1] = '\0';
@@ -7053,24 +7092,18 @@ void GeoProjectionConverter::parse(int argc, char* argv[]) {
       if (argv[i + 1] == nullptr || argv[i + 1][0] == '\0') {
         laserror("'%s' needs at least 1 argument: PROJ string not specified", argv[i]);
       }
-      // When using the PROJ functionalities, the PROJ lib must be loaded dynamically
-      load_proj_library(nullptr);
-
       size_t buffer_size = strlen(argv[i + 1]) + 1;
-      char* proj_source_string = (char*)malloc(buffer_size);
+      proj_source_string = (char*)malloc_las(buffer_size);
 
       if (proj_source_string) {
         strcpy_las(proj_source_string, buffer_size, argv[i + 1]);
 
         if (argv[i + 2] != nullptr && argv[i + 2][0] != '\0' && argv[i + 2][0] != '-') {
           buffer_size = strlen(argv[i + 2]) + 1;
-          char* proj_target_string = (char*)malloc(buffer_size);
+          proj_target_string = (char*)malloc_las(buffer_size);
 
           if (proj_target_string) {
             strcpy_las(proj_target_string, buffer_size, argv[i + 2]);
-
-            set_proj_param_for_transformation_with_string(proj_source_string, proj_target_string);
-            free((char*)proj_target_string);
             *argv[i] = '\0';
             *argv[i + 1] = '\0';
             *argv[i + 2] = '\0';
@@ -7080,36 +7113,28 @@ void GeoProjectionConverter::parse(int argc, char* argv[]) {
             laserror("Failed to read the PROJ string target from the command line");
           }
         } else {
-          set_proj_param_for_transformation_with_string(proj_source_string, nullptr);
           *argv[i] = '\0';
           *argv[i + 1] = '\0';
           i += 1;
         }
-        free((char*)proj_source_string);
       } else {
         laserror("Failed to read the source PROJ string from the command line");
       }
       is_proj_request = true;
     } else if (strcmp(argv[i], "-proj_json") == 0) {
       if (argv[i + 1] != nullptr && argv[i + 1][0] != '\0' && argv[i + 1][0] != '-') {
-        // When using the PROJ functionalities, the PROJ lib must be loaded dynamically
-        load_proj_library(nullptr);
-
         size_t buffer_size = strlen(argv[i + 1]) + 1;
-        char* proj_source_json = (char*)malloc(buffer_size);
+        proj_source_json = (char*)malloc_las(buffer_size);
 
         if (proj_source_json) {
           strcpy_las(proj_source_json, buffer_size, argv[i + 1]);
 
           if (argv[i + 2] != nullptr && argv[i + 2][0] != '\0' && argv[i + 2][0] != '-') {
             buffer_size = strlen(argv[i + 2]) + 1;
-            char* proj_target_json = (char*)malloc(buffer_size);
+            proj_target_json = (char*)malloc_las(buffer_size);
 
             if (proj_target_json) {
               strcpy_las(proj_target_json, buffer_size, argv[i + 2]);
-
-              set_proj_param_for_transformation_with_json(proj_source_json, proj_target_json);
-              free((char*)proj_target_json);
             } else {
               free((char*)proj_source_json);
               laserror("Failed to read the PROJJSON target filename from the command line");
@@ -7119,15 +7144,12 @@ void GeoProjectionConverter::parse(int argc, char* argv[]) {
             *argv[i + 2] = '\0';
             i += 2;
           } else {
-            // If only one json file is specified in the cmd, it is used as the target
-            set_proj_crs_with_json(proj_source_json, false);
             check_header_for_crs = true;
 
             *argv[i] = '\0';
             *argv[i + 1] = '\0';
             i += 1;
           }
-          free((char*)proj_source_json);
         } else {
           laserror("Failed to read the PROJJSON source or target filename from the command line");
         }
@@ -7137,24 +7159,18 @@ void GeoProjectionConverter::parse(int argc, char* argv[]) {
       is_proj_request = true;
     } else if (strcmp(argv[i], "-proj_wkt") == 0) {
       if (argv[i + 1] != nullptr && argv[i + 1][0] != '\0' && argv[i + 1][0] != '-') {
-        // When using the PROJ functionalities, the PROJ lib must be loaded dynamically
-        load_proj_library(nullptr);
-
         size_t buffer_size = strlen(argv[i + 1]) + 1;
-        char* proj_source_wkt = (char*)malloc(buffer_size);
+        proj_source_wkt = (char*)malloc_las(buffer_size);
 
         if (proj_source_wkt) {
           strcpy_las(proj_source_wkt, buffer_size, argv[i + 1]);
 
           if (argv[i + 2] != nullptr && argv[i + 2][0] != '\0' && argv[i + 2][0] != '-') {
             buffer_size = strlen(argv[i + 2]) + 1;
-            char* proj_target_wkt = (char*)malloc(buffer_size);
+            proj_target_wkt = (char*)malloc_las(buffer_size);
 
             if (proj_target_wkt) {
               strcpy_las(proj_target_wkt, buffer_size, argv[i + 2]);
-
-              set_proj_param_for_transformation_with_wkt(proj_source_wkt, proj_target_wkt);
-              free((char*)proj_target_wkt);
             } else {
               free((char*)proj_source_wkt);
               laserror("Failed to read the WKT target filename from the command line");
@@ -7164,15 +7180,12 @@ void GeoProjectionConverter::parse(int argc, char* argv[]) {
             *argv[i + 2] = '\0';
             i += 2;
           } else {
-            // If only one json file is specified in the cmd, it is used as the target
-            set_proj_crs_with_wkt(proj_source_wkt, false);
             check_header_for_crs = true;
 
             *argv[i] = '\0';
             *argv[i + 1] = '\0';
             i += 1;
           }
-          free((char*)proj_source_wkt);
         } else {
           laserror("Failed to read the WKT source or target filename from the command line");
         }
@@ -7188,9 +7201,6 @@ void GeoProjectionConverter::parse(int argc, char* argv[]) {
       if (argv[j] == nullptr || argv[j][0] == '\0' || argv[j][0] == '-') {
         laserror("'%s' needs minimum 1 arguments", argv[i]);
       }
-      // When using the PROJ functionalities, the PROJ lib must be loaded dynamically
-      load_proj_library(nullptr);
-
       // Read parameters until a new argument (starting with '-') or the end is reached
       while (argv[j] != nullptr && argv[j][0] != '-' && projParameters.arg_count < projParameters.max_param) {
         // Validation: Check whether the parameter is valid
@@ -7208,13 +7218,13 @@ void GeoProjectionConverter::parse(int argc, char* argv[]) {
         j++;
       }
       // Reserve the memory for the number of parameters read
-      projParameters.proj_info_args = (char**)malloc(projParameters.arg_count * sizeof(char*));
+      projParameters.proj_info_args = (char**)malloc_las(projParameters.arg_count * sizeof(char*));
 
       if (projParameters.proj_info_args) {
         // Saving the parameters
         for (int k = 0; k < projParameters.arg_count; k++) {
           size_t buffer_size = strlen(argv[i + 1 + k]) + 1;
-          projParameters.proj_info_args[k] = (char*)malloc(buffer_size);
+          projParameters.proj_info_args[k] = (char*)malloc_las(buffer_size);
           if (projParameters.proj_info_args[k]) {
             strcpy_las(projParameters.proj_info_args[k], buffer_size, argv[i + 1 + k]);
           }
@@ -7622,6 +7632,36 @@ int GeoProjectionConverter::unparse(char* string) const {
   if (target_elevation_precision != 0.0) {
     n += sprintf(&string[n], "-target_elevation_precision %lf ", target_elevation_precision);
   }
+  if (is_proj_request == true) {
+    if (target_code > 0) {
+      if (source_code > 0) {
+        n += sprintf(&string[n], "-proj_epsg %u %u ", source_code, target_code);
+      } else {
+        n += sprintf(&string[n], "-proj_epsg %u ", target_code);
+      }
+    }
+    if (proj_source_string != nullptr) {
+      if (proj_target_string != nullptr) {
+        n += sprintf(&string[n], "-proj_string %s %s ", proj_source_string, proj_target_string);
+      } else {
+        n += sprintf(&string[n], "-proj_string %s ", proj_source_string);
+      }
+    }
+    if (proj_source_json != nullptr) {
+      if (proj_target_json != nullptr) {
+        n += sprintf(&string[n], "-proj_json %s %s ", proj_source_json, proj_target_json);
+      } else {
+        n += sprintf(&string[n], "-proj_json %s ", proj_source_json);
+      }
+    }
+    if (proj_source_wkt != nullptr) {
+      if (proj_target_wkt != nullptr) {
+        n += sprintf(&string[n], "-proj_wkt %s %s ", proj_source_wkt, proj_target_wkt);
+      } else {
+        n += sprintf(&string[n], "-proj_wkt %s ", proj_source_wkt);
+      }
+    }
+  }
 
   return n;
 }
@@ -7754,10 +7794,12 @@ bool GeoProjectionConverter::to_lon_lat_ele(const double* point, double& longitu
         longitude = point[0];
         latitude = point[1];
         break;
-      case GEO_PROJECTION_LAT_LONG:
+      case GEO_PROJECTION_LAT_LONG: {
+        double tmp = point[0];
         longitude = point[1];
-        latitude = point[0];
+        latitude = tmp;
         break;
+      }
       case GEO_PROJECTION_ECEF:
         ECEFtoLL(
             coordinates2meter * point[0], coordinates2meter * point[1], coordinates2meter * point[2], latitude, longitude, elevation_in_meter,
@@ -7930,12 +7972,12 @@ double GeoProjectionConverter::get_target_precision(double header_precision) con
   } else if (source_projection && (source_projection->type == GEO_PROJECTION_LONG_LAT || source_projection->type == GEO_PROJECTION_LAT_LONG)) {
     return 0.01;
   } else if (projParameters.proj_target_crs && projParameters.proj_ctx) {
-    PJ* target_coord_system = proj_crs_get_coordinate_system(projParameters.proj_ctx, projParameters.proj_target_crs);
+    PJ* target_coord_system = proj_crs_get_coordinate_system_ptr(projParameters.proj_ctx, projParameters.proj_target_crs);
 
     if (target_coord_system) {
-      PJ* source_coord_system = proj_crs_get_coordinate_system(projParameters.proj_ctx, projParameters.proj_source_crs);
-      PJ_COORDINATE_SYSTEM_TYPE target_cs_type = proj_cs_get_type(projParameters.proj_ctx, target_coord_system);
-      PJ_COORDINATE_SYSTEM_TYPE source_cs_type = proj_cs_get_type(projParameters.proj_ctx, source_coord_system);
+      PJ* source_coord_system = proj_crs_get_coordinate_system_ptr(projParameters.proj_ctx, projParameters.proj_source_crs);
+      PJ_COORDINATE_SYSTEM_TYPE target_cs_type = proj_cs_get_type_ptr(projParameters.proj_ctx, target_coord_system);
+      PJ_COORDINATE_SYSTEM_TYPE source_cs_type = proj_cs_get_type_ptr(projParameters.proj_ctx, source_coord_system);
 
       if (target_cs_type == PJ_CS_TYPE_ELLIPSOIDAL) {
         return 1e-7;
@@ -8181,6 +8223,9 @@ bool GeoProjectionConverter::get_dtm_projection_parameters(
           case PCS_NAD83_Alabama_West:
             *coordinate_zone = GCTP_NAD83_Alabama_West;
             break;
+          case PCS_NAD83_Alaska_zone_1:
+            *coordinate_zone = GCTP_NAD83_Alaska_zone_1;
+            break;
           case PCS_NAD83_Alaska_zone_2:
             *coordinate_zone = GCTP_NAD83_Alaska_zone_2;
             break;
@@ -8323,7 +8368,7 @@ bool GeoProjectionConverter::get_dtm_projection_parameters(
             *coordinate_zone = GCTP_NAD83_Kentucky_North;
             break;
           case PCS_NAD83_Kentucky_South:
-            *coordinate_zone = GCTP_NAD83_Kentucky_North;
+            *coordinate_zone = GCTP_NAD83_Kentucky_South;
             break;
           case PCS_NAD83_Louisiana_North:
             *coordinate_zone = GCTP_NAD83_Louisiana_North;
@@ -8633,30 +8678,33 @@ bool GeoProjectionConverter::set_dtm_projection_parameters(
 /// create PROJ object using the epsg code (for source=true or target=false)
 /// Parse and validate the input epsg and set the ProjParameter crs
 void GeoProjectionConverter::set_proj_crs_with_epsg(unsigned int& epsg_code, bool source /*=true*/) {
-  int err_no;
+  int err_no = 0;
 
   if (epsg_code == 0 || epsg_code > 999999) laserror("Invalid epsg code: %u", epsg_code);
 
-  projParameters.proj_ctx = proj_context_create();
+  projParameters.proj_ctx = my_proj_context_create();
+  // Register log handler
+  proj_log_func_ptr(projParameters.proj_ctx, nullptr, myCustomProjErrorHandler);
 
   if (!projParameters.proj_ctx) laserror("Failed to create PROJ context");
 
   char crs_epsg[20];
   snprintf(crs_epsg, sizeof(crs_epsg), "EPSG:%u", epsg_code);
 
-  PJ* proj_crs = proj_create(projParameters.proj_ctx, crs_epsg);
+  PJ* proj_crs = my_proj_create(projParameters.proj_ctx, crs_epsg);
 
   // Check whether the CRS is valid
   if (!proj_crs) {
-    err_no = proj_context_errno(projParameters.proj_ctx);
+    err_no = my_proj_context_errno(projParameters.proj_ctx);
 
     if (err_no == 0) {
-      proj_context_destroy(projParameters.proj_ctx);
+      my_proj_context_destroy(projParameters.proj_ctx);
       laserror("Failed to create the CRS object using PROJ epsg code '%f'", crs_epsg);
     } else {
-      const char* errstr = proj_context_errno_string(projParameters.proj_ctx, err_no);
-      proj_context_destroy(projParameters.proj_ctx);
-      laserror("Failed to create the CRS object using PROJ epsg code: %s", errstr);
+      const char* errstr_ptr = my_proj_context_errno_string(projParameters.proj_ctx, err_no);
+      std::string errstr = errstr_ptr ? errstr_ptr : "(unknown error)";
+      my_proj_context_destroy(projParameters.proj_ctx);
+      laserror("Failed to create the CRS object using PROJ epsg code: %s", errstr.c_str());
     }
   }
 
@@ -8674,27 +8722,30 @@ void GeoProjectionConverter::set_proj_crs_with_epsg(unsigned int& epsg_code, boo
 /// create PROJ object using the proj string (for source=true or target=false)
 /// Parse and validate the input proj string and set the ProjParameter crs
 void GeoProjectionConverter::set_proj_crs_with_string(const char* proj_string, bool source /*= true*/) {
-  int err_no;
+  int err_no = 0;
 
   if (proj_string == nullptr) laserror("PROJ string is empty");
 
-  projParameters.proj_ctx = proj_context_create();
+  projParameters.proj_ctx = my_proj_context_create();
+  // Register log handler
+  proj_log_func_ptr(projParameters.proj_ctx, nullptr, myCustomProjErrorHandler);
 
   if (!projParameters.proj_ctx) laserror("Failed to create PROJ context");
 
-  PJ* proj_crs = proj_create(projParameters.proj_ctx, proj_string);
+  PJ* proj_crs = my_proj_create(projParameters.proj_ctx, proj_string);
 
   // Check whether the CRS is valid
   if (!proj_crs) {
-    err_no = proj_context_errno(projParameters.proj_ctx);
+    err_no = my_proj_context_errno(projParameters.proj_ctx);
 
     if (err_no == 0) {
-      proj_context_destroy(projParameters.proj_ctx);
+      my_proj_context_destroy(projParameters.proj_ctx);
       laserror("Failed to create the CRS objects using PROJ string '%s'", proj_string);
     } else {
-      const char* errstr = proj_context_errno_string(projParameters.proj_ctx, err_no);
-      proj_context_destroy(projParameters.proj_ctx);
-      laserror("Failed to create the CRS objects using PROJ string: %s", errstr);
+      const char* errstr_ptr = my_proj_context_errno_string(projParameters.proj_ctx, err_no);
+      std::string errstr = errstr_ptr ? errstr_ptr : "(unknown error)";
+      my_proj_context_destroy(projParameters.proj_ctx);
+      laserror("Failed to create the CRS objects using PROJ string: %s", errstr.c_str());
     }
   }
 
@@ -8712,11 +8763,13 @@ void GeoProjectionConverter::set_proj_crs_with_string(const char* proj_string, b
 /// create PROJ object using the json format (for source=true or target=false)
 /// Parse and validate the input json file and set the ProjParameter crs
 void GeoProjectionConverter::set_proj_crs_with_json(const char* json_filename, bool source /*= true*/) {
-  int err_no;
+  int err_no = 0;
 
   if (json_filename == nullptr) laserror("Json filename is missing");
 
-  projParameters.proj_ctx = proj_context_create();
+  projParameters.proj_ctx = my_proj_context_create();
+  // Register log handler
+  proj_log_func_ptr(projParameters.proj_ctx, nullptr, myCustomProjErrorHandler);
 
   if (!projParameters.proj_ctx) laserror("Failed to create PROJ context");
 
@@ -8725,48 +8778,49 @@ void GeoProjectionConverter::set_proj_crs_with_json(const char* json_filename, b
   if (!Proj_file) {
     laserror("The proj_json file '%s' could not be opened", json_filename);
   }
-  fseek(Proj_file, 0, SEEK_END);
-  size_t fileSize = ftell(Proj_file);
-  if (fileSize == -1L) {
-    proj_context_destroy(projParameters.proj_ctx);
+  fseek_las(Proj_file, 0, SEEK_END);
+  I64 fileSize = ftell_las(Proj_file);
+  if (fileSize == -1) {
+    my_proj_context_destroy(projParameters.proj_ctx);
     laserror("Error reading file '%s'", json_filename);
   }
-  fseek(Proj_file, 0, SEEK_SET);
+  fseek_las(Proj_file, 0, SEEK_SET);
   char* jsonContent = new char[fileSize + 1];
 #pragma warning(push)
 #pragma warning(disable : 6001)
   if (!jsonContent) {
     fclose(Proj_file);
-    proj_context_destroy(projParameters.proj_ctx);
+    my_proj_context_destroy(projParameters.proj_ctx);
     laserror("Memory allocation failed for WKT content");
   }
   size_t readSize = fread(jsonContent, 1, fileSize, Proj_file);
 
-  if (readSize > fileSize) {
+  if (readSize > (size_t)fileSize) {
     delete[] jsonContent;
     fclose(Proj_file);
-    proj_context_destroy(projParameters.proj_ctx);
+    my_proj_context_destroy(projParameters.proj_ctx);
     laserror("Error reading the PROJJSON file '%s'", json_filename);
   }
   jsonContent[readSize] = '\0';
   fclose(Proj_file);
 
-  PJ* proj_crs = proj_create(projParameters.proj_ctx, jsonContent);
+  PJ* proj_crs = my_proj_create(projParameters.proj_ctx, jsonContent);
 
   delete[] jsonContent;
 #pragma warning(pop)
 
   // Check whether the CRS is valid
   if (!proj_crs) {
-    err_no = proj_context_errno(projParameters.proj_ctx);
+    err_no = my_proj_context_errno(projParameters.proj_ctx);
 
     if (err_no == 0) {
-      proj_context_destroy(projParameters.proj_ctx);
+      my_proj_context_destroy(projParameters.proj_ctx);
       laserror("Failed to create the CRS object using PROJJSON file '%f'", json_filename);
     } else {
-      const char* errstr = proj_context_errno_string(projParameters.proj_ctx, err_no);
-      proj_context_destroy(projParameters.proj_ctx);
-      laserror("Failed to create the CRS object using PROJJSON file: %s", errstr);
+      const char* errstr_ptr = my_proj_context_errno_string(projParameters.proj_ctx, err_no);
+      std::string errstr = errstr_ptr ? errstr_ptr : "(unknown error)";
+      my_proj_context_destroy(projParameters.proj_ctx);
+      laserror("Failed to create the CRS object using PROJJSON file: %s", errstr.c_str());
     }
   }
 
@@ -8784,12 +8838,14 @@ void GeoProjectionConverter::set_proj_crs_with_json(const char* json_filename, b
 /// create PROJ object using the wkt format (for source=true or target=false)
 /// Parse and validate the input wkt file and set the ProjParameter crs
 void GeoProjectionConverter::set_proj_crs_with_wkt(const char* wkt_filename, bool source /*= true*/) {
-  size_t fileSize = 0;
-  int err_no;
+  I64 fileSize = 0;
+  int err_no = 0;
 
   if (!wkt_filename) laserror("Wkt filename is missing");
 
-  projParameters.proj_ctx = proj_context_create();
+  projParameters.proj_ctx = my_proj_context_create();
+  // Register log handler
+  proj_log_func_ptr(projParameters.proj_ctx, nullptr, myCustomProjErrorHandler);
 
   if (!projParameters.proj_ctx) laserror("Failed to create PROJ context");
 
@@ -8799,45 +8855,46 @@ void GeoProjectionConverter::set_proj_crs_with_wkt(const char* wkt_filename, boo
     laserror("The WKT file '%s' could not be opened", wkt_filename);
   }
 
-  fseek(Proj_file, 0, SEEK_END);
-  fileSize = ftell(Proj_file);
-  if (fileSize == -1L) {
-    proj_context_destroy(projParameters.proj_ctx);
+  fseek_las(Proj_file, 0, SEEK_END);
+  fileSize = ftell_las(Proj_file);
+  if (fileSize == -1) {
+    my_proj_context_destroy(projParameters.proj_ctx);
     laserror("Error reading file '%s'", wkt_filename);
   }
-  fseek(Proj_file, 0, SEEK_SET);
+  fseek_las(Proj_file, 0, SEEK_SET);
   char* wktContent = new char[fileSize + 1];
 
   if (!wktContent) {
     fclose(Proj_file);
-    proj_context_destroy(projParameters.proj_ctx);
+    my_proj_context_destroy(projParameters.proj_ctx);
     laserror("Memory allocation failed for WKT content");
   }
   size_t readSize = fread(wktContent, 1, fileSize, Proj_file);
 
-  if (readSize > fileSize) {
+  if (readSize > (size_t)fileSize) {
     delete[] wktContent;
     fclose(Proj_file);
-    proj_context_destroy(projParameters.proj_ctx);
+    my_proj_context_destroy(projParameters.proj_ctx);
     laserror("Error reading the WKT file '%s'", wkt_filename);
   }
   wktContent[readSize] = '\0';
   fclose(Proj_file);
 
-  PJ* proj_crs = proj_create(projParameters.proj_ctx, wktContent);
+  PJ* proj_crs = my_proj_create(projParameters.proj_ctx, wktContent);
 
   // Check whether the CRS is valid
   if (!proj_crs) {
-    err_no = proj_context_errno(projParameters.proj_ctx);
+    err_no = my_proj_context_errno(projParameters.proj_ctx);
     delete[] wktContent;
 
     if (err_no == 0) {
-      proj_context_destroy(projParameters.proj_ctx);
+      my_proj_context_destroy(projParameters.proj_ctx);
       laserror("Failed to create the CRS objects using WKT file '%f'", wkt_filename);
     } else {
-      const char* errstr = proj_context_errno_string(projParameters.proj_ctx, err_no);
-      proj_context_destroy(projParameters.proj_ctx);
-      laserror("Failed to create the CRS objects using WKT file: %s", errstr);
+      const char* errstr_ptr = my_proj_context_errno_string(projParameters.proj_ctx, err_no);
+      std::string errstr = errstr_ptr ? errstr_ptr : "(unknown error)";
+      my_proj_context_destroy(projParameters.proj_ctx);
+      laserror("Failed to create the CRS objects using WKT file: %s", errstr.c_str());
     }
   }
 
@@ -8859,27 +8916,30 @@ void GeoProjectionConverter::set_proj_crs_with_wkt(const char* wkt_filename, boo
 /// create PROJ object using the wkt content e.g. from the file header (for source=true or target=false)
 /// Parse and validate the input wkt content and set the ProjParameter crs
 void GeoProjectionConverter::set_proj_crs_with_file_header_wkt(const char* wktContent, bool source /*= true*/) {
-  int err_no;
+  int err_no = 0;
 
   if (!wktContent) laserror("Wkt content is empty");
 
-  projParameters.proj_ctx = proj_context_create();
+  projParameters.proj_ctx = my_proj_context_create();
+  // Register log handler
+  proj_log_func_ptr(projParameters.proj_ctx, nullptr, myCustomProjErrorHandler);
 
   if (!projParameters.proj_ctx) laserror("Failed to create PROJ context");
 
-  PJ* proj_crs = proj_create(projParameters.proj_ctx, wktContent);
+  PJ* proj_crs = my_proj_create(projParameters.proj_ctx, wktContent);
 
   // Check whether the CRS is valid
   if (!proj_crs) {
-    err_no = proj_context_errno(projParameters.proj_ctx);
+    err_no = my_proj_context_errno(projParameters.proj_ctx);
 
     if (err_no == 0) {
-      proj_context_destroy(projParameters.proj_ctx);
+      my_proj_context_destroy(projParameters.proj_ctx);
       laserror("Failed to create the CRS objects using WKT content '%f'", wktContent);
     } else {
-      const char* errstr = proj_context_errno_string(projParameters.proj_ctx, err_no);
-      proj_context_destroy(projParameters.proj_ctx);
-      laserror("Failed to create the CRS objects using WKT content: %s", errstr);
+      const char* errstr_ptr = my_proj_context_errno_string(projParameters.proj_ctx, err_no);
+      std::string errstr = errstr_ptr ? errstr_ptr : "(unknown error)";
+      my_proj_context_destroy(projParameters.proj_ctx);
+      laserror("Failed to create the CRS objects using WKT content: %s", errstr.c_str());
     }
   }
 
@@ -8893,24 +8953,62 @@ void GeoProjectionConverter::set_proj_crs_with_file_header_wkt(const char* wktCo
   }
 }
 
+/// load the proj lib and set the source and target PROJ objects
+void GeoProjectionConverter::load_proj() {
+  if (is_proj_request == true) {   
+    // When using the PROJ functionalities, the PROJ lib must be loaded dynamically
+    load_proj_library(nullptr);
+
+    // Set the correct source and target arguments
+    if (target_code > 0) {
+      if (source_code > 0) {
+        set_proj_param_for_transformation_with_epsg(source_code, target_code);
+      } else {
+        set_proj_crs_with_epsg(target_code, false);
+      }
+    } else if (proj_source_string != nullptr) {
+      if (proj_target_string != nullptr) {
+        set_proj_param_for_transformation_with_string(proj_source_string, proj_target_string);
+      } else {
+        // If only one PROJ-string is specified in the cmd, it is used as the target
+        set_proj_param_for_transformation_with_string(proj_source_string, nullptr);
+      }
+    } else if (proj_source_json != nullptr) {
+      if (proj_target_json != nullptr) {
+        set_proj_param_for_transformation_with_json(proj_source_json, proj_target_json);
+      } else {
+        // If only one json file is specified in the cmd, it is used as the target
+        set_proj_crs_with_json(proj_source_json, false);
+      }
+    } else if (proj_source_wkt != nullptr) {
+      if (proj_target_wkt != nullptr) {
+        set_proj_param_for_transformation_with_wkt(proj_source_wkt, proj_target_wkt);
+      } else {
+        // If only one wkt file is specified in the cmd, it is used as the target
+        set_proj_crs_with_wkt(proj_source_wkt, false);
+      }
+    }
+  }
+}
+
 /// IMPORTANT: The Proj lib must be installed and loaded to use this functionality.
 /// IMPORTANT: The source and target CRS must have been generated before to create a transformation object
 /// create PROJ object for the transformation
 void GeoProjectionConverter::set_proj_crs_transform() {
-  int err_no;
+  int err_no = 0;
   // Create the transformation PROJ object
   if (projParameters.proj_source_crs && projParameters.proj_target_crs) {
     // Check whether transformation between CRSs is valid
     projParameters.proj_transform_crs =
-        proj_create_crs_to_crs_from_pj(projParameters.proj_ctx, projParameters.proj_source_crs, projParameters.proj_target_crs, nullptr, nullptr);
+        proj_create_crs_to_crs_from_pj_ptr(projParameters.proj_ctx, projParameters.proj_source_crs, projParameters.proj_target_crs, nullptr, nullptr);
 
     if (!projParameters.proj_transform_crs) {
-      err_no = proj_context_errno(projParameters.proj_ctx);
+      err_no = my_proj_context_errno(projParameters.proj_ctx);
 
-      if (!proj_is_crs(projParameters.proj_source_crs) || !proj_is_crs(projParameters.proj_target_crs)) {
-        proj_destroy(projParameters.proj_source_crs);
-        proj_destroy(projParameters.proj_target_crs);
-        proj_context_destroy(projParameters.proj_ctx);
+      if (!proj_is_crs_ptr(projParameters.proj_source_crs) || !proj_is_crs_ptr(projParameters.proj_target_crs)) {
+        proj_destroy_ptr(projParameters.proj_source_crs);
+        proj_destroy_ptr(projParameters.proj_target_crs);
+        my_proj_context_destroy(projParameters.proj_ctx);
         laserror(
             "Failed to create PROJ object for the transformation. Currently, only transformations between different Coordinate Reference Systems "
             "(CRS) are supported. "
@@ -8918,16 +9016,17 @@ void GeoProjectionConverter::set_proj_crs_transform() {
             "(CS) "
             "operations are not supported at the moment.");
       }
-      proj_destroy(projParameters.proj_source_crs);
-      proj_destroy(projParameters.proj_target_crs);
+      proj_destroy_ptr(projParameters.proj_source_crs);
+      proj_destroy_ptr(projParameters.proj_target_crs);
 
       if (err_no == 0) {
-        proj_context_destroy(projParameters.proj_ctx);
+        my_proj_context_destroy(projParameters.proj_ctx);
         laserror("Failed to create PROJ object for the transformation, reason unknown");
       } else {
-        const char* errstr = proj_context_errno_string(projParameters.proj_ctx, err_no);
-        proj_context_destroy(projParameters.proj_ctx);
-        laserror("Failed to create PROJ object for the transformation: %s", errstr);
+        const char* errstr_ptr = my_proj_context_errno_string(projParameters.proj_ctx, err_no);
+        std::string errstr = errstr_ptr ? errstr_ptr : "(unknown error)";
+        my_proj_context_destroy(projParameters.proj_ctx);
+        laserror("Failed to create PROJ object for the transformation: %s", errstr.c_str());
       }
     }
     LASMessage(LAS_VERY_VERBOSE, "the PROJ transformations object was successfully created");
@@ -8953,7 +9052,7 @@ void GeoProjectionConverter::set_proj_param_for_transformation_with_epsg(unsigne
 /// PROJ transformation using the PROJ string
 /// Parse and validate the input values and set the ProjParameter
 void GeoProjectionConverter::set_proj_param_for_transformation_with_string(const char* proj_source_string, const char* proj_target_string) {
-  int err_no;
+  int err_no = 0;
 
   // If source and target PROJ string is given
   if (proj_source_string && proj_target_string) {
@@ -8965,30 +9064,34 @@ void GeoProjectionConverter::set_proj_param_for_transformation_with_string(const
     set_proj_crs_transform();
   } else if (proj_source_string) {
     // Check whether the individual PORJ string describes a transformation/operation/conversion or a single CRS
-    projParameters.proj_ctx = proj_context_create();
+    projParameters.proj_ctx = my_proj_context_create();
+    // Register log handler
+    proj_log_func_ptr(projParameters.proj_ctx, nullptr, myCustomProjErrorHandler);
 
     if (!projParameters.proj_ctx) laserror("Failed to create PROJ context");
 
-    PJ* proj_crs = proj_create(projParameters.proj_ctx, proj_source_string);
+    PJ* proj_crs = my_proj_create(projParameters.proj_ctx, proj_source_string);
 
     // Check whether the CRS is valid
     if (!proj_crs) {
-      err_no = proj_context_errno(projParameters.proj_ctx);
+      err_no = my_proj_context_errno(projParameters.proj_ctx);
 
       if (err_no == 0) {
-        proj_context_destroy(projParameters.proj_ctx);
+        my_proj_context_destroy(projParameters.proj_ctx);
         laserror("Failed to create the CRS objects using PROJ string '%s'", proj_source_string);
       } else {
-        const char* errstr = proj_context_errno_string(projParameters.proj_ctx, err_no);
-        proj_context_destroy(projParameters.proj_ctx);
-        laserror("Failed to create the CRS objects using PROJ string: %s", errstr);
+        const char* errstr_ptr = my_proj_context_errno_string(projParameters.proj_ctx, err_no);
+        std::string errstr = errstr_ptr ? errstr_ptr : "(unknown error)";
+        my_proj_context_destroy(projParameters.proj_ctx);
+        laserror("Failed to create the CRS objects using PROJ string: %s", errstr.c_str());
       }
     }
-    PJ_TYPE type = proj_get_type(proj_crs);
+    MyPJ_TYPE proj_type = my_proj_get_type(proj_crs);
     // Here the PROJ string already describes a complete transformation/conversion/operation
-    if (type == PJ_TYPE_TRANSFORMATION || type == PJ_TYPE_CONVERSION || type == PJ_TYPE_CONCATENATED_OPERATION) {
+    if (proj_type.type == MY_PJ_TYPE_TRANSFORMATION || proj_type.type == MY_PJ_TYPE_CONVERSION ||
+        proj_type.type == MY_PJ_TYPE_CONCATENATED_OPERATION) {
       projParameters.proj_transform_crs = proj_crs;
-      projParameters.proj_target_crs = proj_get_target_crs(projParameters.proj_ctx, projParameters.proj_transform_crs);
+      projParameters.proj_target_crs = proj_get_target_crs_ptr(projParameters.proj_ctx, projParameters.proj_transform_crs);
 
       if (projParameters.proj_target_crs) {
         LASMessage(LAS_VERBOSE, "using PROJ transformation (piped) string '%s'", proj_source_string);
@@ -9039,15 +9142,75 @@ void GeoProjectionConverter::set_proj_param_for_transformation_with_wkt(const ch
 bool GeoProjectionConverter::do_proj_crs_transformation(double& x, double& y, double& elevation) const {
   if (!projParameters.proj_transform_crs) return false;
 
-  // Prepare Proj input coordinates
-  PJ_COORD coord = proj_coord(x, y, elevation, 0);
-  // Perform the Proj transformation
-  PJ_COORD result = proj_trans(projParameters.proj_transform_crs, PJ_FWD, coord);
+  MyPJ_COORD result = transform_point(projParameters.proj_transform_crs, PJ_FWD, x, y, elevation, 0);
 
   // Assign transformed coordinates
-  x = result.xyzt.x;
-  y = result.xyzt.y;
-  elevation = result.xyzt.z;
+  x = result.x;
+  y = result.y;
+  elevation = result.z;
 
   return true;
+}
+
+/// IMPORTANT: The Proj lib must be installed and loaded to use this functionality.
+/// Attempts to create the WKT representation of the CRS via the PROJ lib.
+/// If it is a Proj transformation, the wkt has already been created.
+/// If GeoTIFFs in the header, first create a projection to get the epsg code.
+void GeoProjectionConverter::get_wkt_from_proj(CHAR*& ogc_wkt_out, GeoProjectionConverter& geoprojectionconverter, LASreader* lasreader) {
+  if (lasreader) {
+    // If there is a target wkt header, it is a CRS transformation
+    const char* wkt_representation = geoprojectionconverter.projParameters.get_target_header_wkt_representation();
+
+    // If the WKT representation has not been created yet
+    if (geoprojectionconverter.source_header_epsg == 0 && wkt_representation == nullptr) {
+      if (!geoprojectionconverter.has_projection(true)) {  // if no source projection was provided in the command line ...
+        // 1. try to get the WKT from file header
+        if (lasreader->header.vlr_geo_ogc_wkt) {
+          geoprojectionconverter.set_proj_crs_with_file_header_wkt(lasreader->header.vlr_geo_ogc_wkt, false);
+        } else if (lasreader->header.vlr_geo_keys) {
+          // 2. If no source CRS was specified and no WKT is in the header, then create WKT from GeoTiff
+          geoprojectionconverter.disable_messages = true;
+
+          geoprojectionconverter.set_projection_from_geo_keys(
+              lasreader->header.vlr_geo_keys[0].number_of_keys, (GeoProjectionGeoKeys*)lasreader->header.vlr_geo_key_entries,
+              lasreader->header.vlr_geo_ascii_params, lasreader->header.vlr_geo_double_params);
+
+          CHAR* ogc_wkt = nullptr;
+          I32 len = 0;
+          if (geoprojectionconverter.get_ogc_wkt_from_projection(len, &ogc_wkt)) {
+            geoprojectionconverter.set_proj_crs_with_file_header_wkt(ogc_wkt, true);
+            // 3. if no WKT can be generated from GeoTiff try to get die EPSG from GeoTiff
+          } else if (geoprojectionconverter.source_header_epsg) {
+            LASMessage(
+                LAS_WARNING,
+                "No valid WKT could be generated from the GeoTiff of the source file. The EPSG code from the GeoTiff is used for generating the WKT, "
+                "this can lead to loss of GeoTiff arguments, which can lead to inaccuracies or data loss in the WKT.");
+            geoprojectionconverter.set_proj_crs_with_epsg(geoprojectionconverter.source_header_epsg, true);
+          } else {
+            laserror(
+                "No WKT could be generated from the header information of the source file. Please specify the coordinate system (CRS) directly when "
+                "calling the operation.");
+          }
+          geoprojectionconverter.reset_projection();
+        }
+      }
+      wkt_representation = geoprojectionconverter.projParameters.get_target_header_wkt_representation();
+    }
+    if (wkt_representation == nullptr) {
+      // If no WKT representation is available, try to create it with EPSG
+      if (geoprojectionconverter.source_header_epsg > 0) {
+        geoprojectionconverter.set_proj_crs_with_epsg(geoprojectionconverter.source_header_epsg, false);
+        wkt_representation = geoprojectionconverter.projParameters.get_target_header_wkt_representation();
+      }
+    }
+    if (wkt_representation) {
+      size_t buff_len = strlen(wkt_representation) + 1;
+      ogc_wkt_out = (char*)calloc(buff_len, sizeof(char));
+
+      if (ogc_wkt_out) {
+        strcpy_las(ogc_wkt_out, buff_len, wkt_representation);
+        ogc_wkt_out[buff_len - 1] = '\0';
+      }
+    }
+  }
 }

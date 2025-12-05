@@ -169,41 +169,91 @@ lascanopy64 -i *.laz -p 25 50 75 95 -loc list_of_circles.txt
 lascanopy64 -i *.laz -d 2.0 4.0 6.0 8.0 -fractions -lor list_of_rectangles.txt  
 lascanopy64 -i *.laz -p 95 -int_p 95 -cov -fractions -lop list_of_polygons.shp  
 lascanopy64 -i 2014_07.laz -ll 470000 5550000 -step 10 -ncols 500 -nrows 200 -cov -p 50 95
-
+lascanopy64 -i *.laz -ocsv -ground_class 2 -p_ith_return 3 4 -l_mom -pzabovex 5 -above_mean
 
 ## lascanopy arguments for metrics 
 
--abv                       : report number of points above the cutoff  
--all                       : report total number of points  
--avg                       : for each grid cell compute average  
--b [n]                     : deliver the percentage or fraction of points between the height cutoff (aka breast height) and the maximum height [n]  
--b_upper [n]               : specifies a certain height [n] percentile to be used instead of the maximum height as "upper" limit for the bins  
--c [m] [n] [o] ...         : compute those height rasters [m-n,n-o,...]  
--cov                       : cover is computed as the number of first returns above the cover cutoff divided by the number of all first returns and output as a percentage  
--d [m] [n] [o] ...         : compute a height raster [m-n,n-o,...] in which the counts are divided by the total number of points and scaled to a percentage  
--dns                       : compute the canopy density as the number of all points above the cover cutoff divided by the number of all returns  
--gap                       : compute the inverse of the canopy cover (100% - canopy)  
--gps_max                   : compute GPS max value  
--gps_min                   : compute GPS min value  
--hom                       : compute the height & intensity metric known as "Height of Median Energy"  
--int_avg                   : compute intensity average  
--int_c [m] [n] [o] ...     : produce intensity bands with gap values [m] [n] [o] ...  
--int_d [m] [n] [o] ...     : produce intensity bands with absolute values [m] [n] [o] ...  
--int_kur                   : compute intensity kurtosis  
--int_max                   : compute intensity maximum  
--int_min                   : compute intensity minimum  
--int_p [m] [n] [o] ...     : produce intensity percentiles with percent values [m] [n] [o] ...  
--int_qav                   : compute intensity quadratic average  
--int_ske                   : compute intensity skewness  
--int_std                   : compute intensity standard deviation  
--kur                       : compute kurtosis / bulge  
--max                       : for each grid cell keep highest value  
--min                       : for each grid cell keep lowest value  
--p [m] [n] [o] ...         : compute height percentiles [m] [n] [o] ...  
--qav                       : computer the average square height above the height cutoff  
--ske                       : compute height skewness  
--std                       : for each grid cell compute standard deviation  
--vc [m] [n] [o] ...        : compute the Vertical Complexity Index (VCI) with bin sizes width of [m] [n] [o] ...  
+-abv                     : report number of points above the cutoff  
+-all                     : report total number of points  
+-avg                     : for each grid cell compute average  
+-b [n]                   : deliver the percentage or fraction of points between the height cutoff (aka breast height) and the maximum height [n]  
+-b_upper [n]             : specifies a certain height [n] percentile to be used instead of the maximum height as "upper" limit for the bins  
+-c [m] [n] [o] ...       : compute those height rasters [m-n,n-o,...]  
+-cov                     : cover is computed as the number of first returns above the cover cutoff divided by the number of all first returns and output as a percentage  
+-d [m] [n] [o] ...       : compute a height raster [m-n,n-o,...] in which the counts are divided by the total number of points and scaled to a percentage  
+-dns                     : compute the canopy density as the number of all points above the cover cutoff divided by the number of all returns  
+-gap                     : compute the inverse of the canopy cover (100% - canopy)  
+-gps_max                 : compute GPS max value  
+-gps_min                 : compute GPS min value  
+-hom                     : compute the height & intensity metric known as "Height of Median Energy"  
+-kur                     : compute kurtosis / bulge  
+-max                     : for each grid cell keep highest value  
+-min                     : for each grid cell keep lowest value  
+-p [m] [n] [o] ...       : compute height percentiles [m] [n] [o] ...  
+-qav                     : computer the average square height above the height cutoff  
+-ske                     : compute height skewness  
+-std                     : for each grid cell compute standard deviation  
+-vc [m] [n] [o] ...      : compute the Vertical Complexity Index (VCI) with bin sizes width of [m] [n] [o] ...  
+-above_mean              : percentage of returns above mean height (Zmean). Reports percentage of points which are higher than the average height.
+-pzabovex [x]            : percentage of returns above X. Reports the proportion of all returns above the specified height X.
+-p_ith_return [m] [n]... : percentage of i-th returns. Reports what percentage of all returns are specifically the n-th return.
+-ground_class [c] [d]... : percentage of returns classified as ground with classification [c]. Reports the proportion of points with the given classification code (e.g., c=2=ground).
+-l_mom                   : compute L-moments of the height distribution.  L-L₂ = spread, L₃ = L-skewness, L₄ = L-kurtosis, τ₃ = L-skewness (L₃/L₂), τ₄ = L-kurtosis (L₄/L₂).
+
+-int_avg                 : compute intensity average  
+-int_c [m] [n] [o] ...   : produce intensity bands with gap values [m] [n] [o] ...  
+-int_d [m] [n] [o] ...   : produce intensity bands with absolute values [m] [n] [o] ...  
+-int_kur                 : compute intensity kurtosis  
+-int_max                 : compute intensity maximum  
+-int_min                 : compute intensity minimum  
+-int_p [m] [n] [o] ...   : produce intensity percentiles with percent values [m] [n] [o] ...  
+-int_qav                 : compute intensity quadratic average  
+-int_ske                 : compute intensity skewness  
+-int_std                 : compute intensity standard deviation  
+
+-red_avg                 : compute red color value average  
+-red_c [m] [n] [o] ...   : produce red color value bands with gap values [m] [n] [o] ...  
+-red_d [m] [n] [o] ...   : produce red color value bands with absolute values [m] [n] [o] ...  
+-red_kur                 : compute red color value kurtosis  
+-red_max                 : compute red color value maximum  
+-red_min                 : compute red color value minimum  
+-red_p [m] [n] [o] ...   : produce red color value percentiles with percent values [m] [n] [o] ...  
+-red_qav                 : compute red color value quadratic average  
+-red_ske                 : compute red color value skewness  
+-red_std                 : compute red color value standard deviation  
+
+-green_avg               : compute green color value average  
+-green_c [m] [n] [o] ... : produce green color value bands with gap values [m] [n] [o] ...  
+-green_d [m] [n] [o] ... : produce green color value bands with absolute values [m] [n] [o] ...  
+-green_kur               : compute green color value kurtosis  
+-green_max               : compute green color value maximum  
+-green_min               : compute green color value minimum  
+-green_p [m] [n] [o] ... : produce green color value percentiles with percent values [m] [n] [o] ...  
+-green_qav               : compute green color value quadratic average  
+-green_ske               : compute green color value skewness  
+-green_std               : compute green color value standard deviation  
+
+-blue_avg                : compute blue color value average  
+-blue_c [m] [n] [o] ...  : produce blue color value bands with gap values [m] [n] [o] ...  
+-blue_d [m] [n] [o] ...  : produce blue color value bands with absolute values [m] [n] [o] ...  
+-blue_kur                : compute blue color value kurtosis  
+-blue_max                : compute blue color value maximum  
+-blue_min                : compute blue color value minimum  
+-blue_p [m] [n] [o] ...  : produce blue color value percentiles with percent values [m] [n] [o] ...  
+-blue_qav                : compute blue color value quadratic average  
+-blue_ske                : compute blue color value skewness  
+-blue_std                : compute blue color value standard deviation  
+
+-nir_avg                 : compute near infrared valuel average  
+-nir_c [m] [n] [o] ...   : produce near infrared valuel bands with gap values [m] [n] [o] ...  
+-nir_d [m] [n] [o] ...   : produce near infrared valuel bands with absolute values [m] [n] [o] ...  
+-nir_kur                 : compute near infrared valuel kurtosis  
+-nir_max                 : compute near infrared valuel maximum  
+-nir_min                 : compute near infrared valuel minimum  
+-nir_p [m] [n] [o] ...   : produce near infrared valuel percentiles with percent values [m] [n] [o] ...  
+-nir_qav                 : compute near infrared valuel quadratic average  
+-nir_ske                 : compute near infrared valuel skewness  
+-nir_std                 : compute near infrared valuel standard deviation  
 
 ## lascanopy other specific arguments
 
@@ -260,7 +310,6 @@ lascanopy64 -i 2014_07.laz -ll 470000 5550000 -step 10 -ncols 500 -nrows 200 -co
 ## Module arguments
 
 ### General
--buffered [n]      : define read or write buffer of size [n]{default=262144}  
 -comma_not_point   : use comma instead of point as decimal separator  
 -neighbors [n]     : set neighbors filename or wildcard [n]  
 -neighbors_lof [n] : set neighbors list of files [fnf]  
@@ -823,6 +872,7 @@ lascanopy64 -i 2014_07.laz -ll 470000 5550000 -step 10 -ncols 500 -nrows 200 -co
 -lof [fnf]      : use input out of a list of files [fnf]  
 -unique         : remove duplicate files in a -lof list  
 -merged         : merge input files  
+-buffered [n]   : use on-the-fly buffering of size [n] for tiles without implicit buffer  
 -stdin          : pipe from stdin  
 
 ### Output
@@ -854,12 +904,10 @@ lascanopy64 -i 2014_07.laz -ll 470000 5550000 -step 10 -ncols 500 -nrows 200 -co
 -temp_files [n]          : set base file name [n] for temp files (example: E:\tmp)
 
 ### parse
-The '-parse [xyz]' flag specifies how to interpret
-each line of the ASCII file. For example, 'tsxyzssa'
-means that the first number is the gpstime, the next
-number should be skipped, the next three numbers are
-the x, y, and z coordinate, the next two should be
-skipped, and the next number is the scan angle.
+The '-parse [xyz]' flag specifies how to interpret each line of the ASCII file.
+For example, 'tsxyzssa' means that the first number is the gpstime, the next
+number should be skipped, the next three numbers are the x, y, and z coordinate,
+the next two should be skipped, and the next number is the scan angle.
 
 The other supported entries are:  
   x : [x] coordinate  
@@ -881,7 +929,7 @@ The other supported entries are:
   o : [o]verlap flag of LAS 1.4 point types 6, 7, 8  
   l : scanner channe[l] of LAS 1.4 point types 6, 7, 8  
   E : terrasolid [E]hco Encoding  
-  c : [c]lassification  
+  c : [c]lassification. If extended classes are used: Use o,l or I to force 1.4 format.  
   u : [u]ser data  
   p : [p]oint source ID  
   e : [e]dge of flight line flag  
@@ -902,27 +950,27 @@ Supported [sep] values:
   semicolon
   hyphen
   space
+  
+## Licensing
 
-## License
+Info on licensing and pricing: https://rapidlasso.de/pricing/.
+If you have any questions or need assistance, email to info@rapidlasso.de.
 
-Please license from info@rapidlasso.de to use the tool
-commercially. 
-You may use the tool to do tests with up to 3 mio points.
-Please note that the unlicensed version may will adjust
-some data and add a bit of white noise to the coordinates.
+## Evaluation and demo mode
+
+Please use the "-demo" argument to run the tool in demo mode. For quality tests,
+use small files (< 1.5 million points). If you use larger files, the output will
+contain diagonal lines/output distortions due to the license protection.
 
 ## Support
 
-To get more information about a tool just goto the
-[LAStools Google Group](http://groups.google.com/group/lastools/)
-and enter the tool name in the search function.
-You will get plenty of samples to this tool.
+1. We invite you to join our LAStools Google Group (http://groups.google.com/group/lastools/).
+   If you are looking for information about a specific tool, enter the tool name in the search 
+   function and you'll find all discussions related to the respective tool. 
+2. Customer Support Page: https://rapidlasso.de/customer-support/.  
+3. Download LAStools: https://rapidlasso.de/downloads/.  
+4. Changelog: https://rapidlasso.de/changelog/.  
 
-To get further support see our
-[rapidlasso service page](https://rapidlasso.de/service/)
 
-Check for latest updates at
-https://rapidlasso.de/category/blog/releases/
-
-If you have any suggestions please let us (info@rapidlasso.de) know.
-
+If you want to send us feedback or have questions that are not answered in the resources above, 
+please email to info@rapidlasso.de.

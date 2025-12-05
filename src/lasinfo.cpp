@@ -112,27 +112,6 @@ static const char* LASpointClassification[32] = {
     "Reserved for ASPRS Definition",
     "Reserved for ASPRS Definition"};
 
-static inline void VecUpdateMinMax3dv(double min[3], double max[3], const double v[3]) {
-  if (v[0] < min[0])
-    min[0] = v[0];
-  else if (v[0] > max[0])
-    max[0] = v[0];
-  if (v[1] < min[1])
-    min[1] = v[1];
-  else if (v[1] > max[1])
-    max[1] = v[1];
-  if (v[2] < min[2])
-    min[2] = v[2];
-  else if (v[2] > max[2])
-    max[2] = v[2];
-}
-
-static inline void VecCopy3dv(double v[3], const double a[3]) {
-  v[0] = a[0];
-  v[1] = a[1];
-  v[2] = a[2];
-}
-
 // Function for converting formatted character string to double
 static double parseFormattedDouble(const char* formattedString) {
   return std::stod(formattedString);
@@ -199,20 +178,24 @@ class LasTool_lasinfo : public LasTool {
   bool do_scale_header = false;
   bool header_preread = false;
   bool edit_header = false;
+  bool no_warnings = false;
   F64* set_offset = 0;
   F64* set_scale = 0;
   F64* scale_header = 0;
-
+  void WarnHeadermodification(std::string argument) {
+    if (!no_warnings) {
+      LASMessage(LAS_WARNING, "set_%s used. File may become invalid.", argument.c_str());
+    }
+  }
 #pragma warning(push)
 #pragma warning(disable : 6262)
- public:
+public:
   void run() {
     int i;
     bool no_header = false;
     bool no_variable_header = false;
     bool no_returns = false;
     bool no_min_max = false;
-    bool no_warnings = false;
     bool check_points = true;
     bool compute_density = false;
     bool gps_week = false;
@@ -766,6 +749,12 @@ class LasTool_lasinfo : public LasTool {
       laserror("no input specified");
     }
 
+    // check proj options
+
+    if (geoprojectionconverter.is_proj_request == true) {
+      geoprojectionconverter.load_proj();
+    }
+
     // omit "suppressed" layers from LAZ decompression (for new LAS 1.4 point types only)
 
     U32 decompress_selective = LASZIP_DECOMPRESS_SELECTIVE_ALL;
@@ -824,9 +813,8 @@ class LasTool_lasinfo : public LasTool {
           edit_header = false;
         }
         const CHAR* file_name = lasreadopener.get_file_name(lasreadopener.get_file_name_current());
-        if ((strstr(file_name, ".laz") == 0) && (strstr(file_name, ".las") == 0) && (strstr(file_name, ".LAZ") == 0) &&
-            (strstr(file_name, ".LAS") == 0)) {
-          laserror("can only edit for LAS or LAZ files, not for '%s'", file_name);
+        if (!IsLasLazFile(std::string(file_name))) {
+          LASMessage(LAS_WARNING, "can only edit for LAS or LAZ files, not for '%s'", file_name);
           edit_header = false;
         }
         if (set_file_source_ID_from_point_source_ID) {
@@ -964,8 +952,8 @@ class LasTool_lasinfo : public LasTool {
               set_offset[1] = lasreader->header.y_offset * scale_header[1];
               set_offset[2] = lasreader->header.z_offset * scale_header[2];
               // clang-format off
-                            LASMessage(LAS_VERBOSE, "set offset from [%f/%f/%f] to [%f/%f/%f]", 
-                              lasreader->header.x_offset, lasreader->header.y_offset, lasreader->header.z_offset, 
+                            LASMessage(LAS_VERBOSE, "set offset from [%f/%f/%f] to [%f/%f/%f]",
+                              lasreader->header.x_offset, lasreader->header.y_offset, lasreader->header.z_offset,
                               set_offset[0], set_offset[1], set_offset[2]);
               // clang-format on
               set_bounding_box = new F64[6];  // x2,x1,y2,y1,z2,z1
@@ -976,10 +964,10 @@ class LasTool_lasinfo : public LasTool {
               set_bounding_box[2] = lasreader->header.max_y * scale_header[1];
               set_bounding_box[4] = lasreader->header.max_z * scale_header[2];
               // clang-format off
-                            LASMessage(LAS_VERBOSE, "set bounding box from [%f/%f/%f-%f/%f/%f] to [%f/%f/%f-%f/%f/%f]", 
-                              lasreader->header.min_x, lasreader->header.min_y, lasreader->header.min_z, 
-                              lasreader->header.max_x, lasreader->header.max_y, lasreader->header.max_z, 
-                              set_bounding_box[1], set_bounding_box[3], set_bounding_box[5], 
+                            LASMessage(LAS_VERBOSE, "set bounding box from [%f/%f/%f-%f/%f/%f] to [%f/%f/%f-%f/%f/%f]",
+                              lasreader->header.min_x, lasreader->header.min_y, lasreader->header.min_z,
+                              lasreader->header.max_x, lasreader->header.max_y, lasreader->header.max_z,
+                              set_bounding_box[1], set_bounding_box[3], set_bounding_box[5],
                               set_bounding_box[0], set_bounding_box[2], set_bounding_box[4]);
               // clang-format on
             }
@@ -989,16 +977,17 @@ class LasTool_lasinfo : public LasTool {
 
           if (set_file_source_ID != -1) {
             U16 file_source_ID = U16_CLAMP(set_file_source_ID);
-            fseek(file, 4, SEEK_SET);
+            fseek_las(file, 4, SEEK_SET);
             fwrite(&file_source_ID, sizeof(U16), 1, file);
           }
           if (set_global_encoding != -1) {
+            WarnHeadermodification("global_encoding");
             U16 global_encoding = U16_CLAMP(set_global_encoding);
-            fseek(file, 6, SEEK_SET);
+            fseek_las(file, 6, SEEK_SET);
             fwrite(&global_encoding, sizeof(U16), 1, file);
           }
           if (set_project_ID_GUID_data_1 != -1) {
-            fseek(file, 8, SEEK_SET);
+            fseek_las(file, 8, SEEK_SET);
             U32 GUID_data_1 = U32_CLAMP(set_project_ID_GUID_data_1);
             U16 GUID_data_2 = U16_CLAMP(set_project_ID_GUID_data_2);
             U16 GUID_data_3 = U16_CLAMP(set_project_ID_GUID_data_3);
@@ -1008,79 +997,85 @@ class LasTool_lasinfo : public LasTool {
             fwrite(&set_project_ID_GUID_data_4[0], 8, 1, file);
           }
           if (set_version_major != -1) {
-            fseek(file, 24, SEEK_SET);
+            WarnHeadermodification("version");
+            fseek_las(file, 24, SEEK_SET);
             fwrite(&set_version_major, sizeof(I8), 1, file);
           }
           if (set_version_minor != -1) {
-            fseek(file, 25, SEEK_SET);
+            WarnHeadermodification("version");
+            fseek_las(file, 25, SEEK_SET);
             fwrite(&set_version_minor, sizeof(I8), 1, file);
           }
           if (set_system_identifier) {
-            fseek(file, 26, SEEK_SET);
+            fseek_las(file, 26, SEEK_SET);
             fwrite(set_system_identifier, sizeof(I8), 32, file);
           }
           if (set_generating_software) {
-            fseek(file, 58, SEEK_SET);
+            fseek_las(file, 58, SEEK_SET);
             fwrite(set_generating_software, sizeof(I8), 32, file);
           }
           if (set_creation_day != -1) {
             U16 creation_day = U16_CLAMP(set_creation_day);
-            fseek(file, 90, SEEK_SET);
+            fseek_las(file, 90, SEEK_SET);
             fwrite(&creation_day, sizeof(U16), 1, file);
           }
           if (set_creation_year != -1) {
             U16 creation_year = U16_CLAMP(set_creation_year);
-            fseek(file, 92, SEEK_SET);
+            fseek_las(file, 92, SEEK_SET);
             fwrite(&creation_year, sizeof(U16), 1, file);
           }
           if (set_header_size) {
-            fseek(file, 94, SEEK_SET);
+            WarnHeadermodification("header_size");
+            fseek_las(file, 94, SEEK_SET);
             fwrite(&set_header_size, sizeof(U16), 1, file);
           }
           if (set_offset_to_point_data) {
-            fseek(file, 96, SEEK_SET);
+            WarnHeadermodification("offset_to_point_data");
+            fseek_las(file, 96, SEEK_SET);
             fwrite(&set_offset_to_point_data, sizeof(U32), 1, file);
           }
           if (set_number_of_variable_length_records != -1) {
-            fseek(file, 100, SEEK_SET);
+            fseek_las(file, 100, SEEK_SET);
             fwrite(&set_number_of_variable_length_records, sizeof(U32), 1, file);
           }
           if (set_point_data_format != -1) {
+            WarnHeadermodification("point_data_format");
             U8 point_data_format = U8_CLAMP(set_point_data_format);
-            fseek(file, 104, SEEK_SET);
+            fseek_las(file, 104, SEEK_SET);
             fwrite(&point_data_format, sizeof(U8), 1, file);
           }
           if (set_point_data_record_length != -1) {
+            WarnHeadermodification("point_data_record_length");
             U16 point_data_record_length = U16_CLAMP(set_point_data_record_length);
-            fseek(file, 105, SEEK_SET);
+            fseek_las(file, 105, SEEK_SET);
             fwrite(&point_data_record_length, sizeof(U16), 1, file);
           }
           if (set_number_of_point_records != -1) {
-            fseek(file, 107, SEEK_SET);
+            fseek_las(file, 107, SEEK_SET);
             fwrite(&set_number_of_point_records, sizeof(I32), 1, file);
           }
           if (set_number_of_points_by_return[0] != -1) {
-            fseek(file, 111, SEEK_SET);
+            fseek_las(file, 111, SEEK_SET);
             fwrite(&(set_number_of_points_by_return[0]), sizeof(I32), 1, file);
           }
           if (set_number_of_points_by_return[1] != -1) {
-            fseek(file, 115, SEEK_SET);
+            fseek_las(file, 115, SEEK_SET);
             fwrite(&(set_number_of_points_by_return[1]), sizeof(I32), 1, file);
           }
           if (set_number_of_points_by_return[2] != -1) {
-            fseek(file, 119, SEEK_SET);
+            fseek_las(file, 119, SEEK_SET);
             fwrite(&(set_number_of_points_by_return[2]), sizeof(I32), 1, file);
           }
           if (set_number_of_points_by_return[3] != -1) {
-            fseek(file, 123, SEEK_SET);
+            fseek_las(file, 123, SEEK_SET);
             fwrite(&(set_number_of_points_by_return[3]), sizeof(I32), 1, file);
           }
           if (set_number_of_points_by_return[4] != -1) {
-            fseek(file, 127, SEEK_SET);
+            fseek_las(file, 127, SEEK_SET);
             fwrite(&(set_number_of_points_by_return[4]), sizeof(I32), 1, file);
           }
           if (set_scale) {
-            fseek(file, 131, SEEK_SET);
+            fseek_las(file, 131, SEEK_SET);
             fwrite(set_scale, 3 * sizeof(F64), 1, file);
             if (do_scale_header)  // clear offset on file-based-offset
             {
@@ -1089,7 +1084,8 @@ class LasTool_lasinfo : public LasTool {
             }
           }
           if (set_offset) {
-            fseek(file, 155, SEEK_SET);
+            WarnHeadermodification("offset");
+            fseek_las(file, 155, SEEK_SET);
             fwrite(set_offset, 3 * sizeof(F64), 1, file);
             if (do_scale_header)  // clear offset on file-based-offset
             {
@@ -1098,7 +1094,7 @@ class LasTool_lasinfo : public LasTool {
             }
           }
           if (set_bounding_box) {
-            fseek(file, 179, SEEK_SET);
+            fseek_las(file, 179, SEEK_SET);
             fwrite(set_bounding_box, 6 * sizeof(F64), 1, file);
             if (do_scale_header)  // clear bb on file-based-bb
             {
@@ -1107,12 +1103,13 @@ class LasTool_lasinfo : public LasTool {
             }
           }
           if (set_start_of_waveform_data_packet_record != -1) {
-            fseek(file, 227, SEEK_SET);
+            WarnHeadermodification("start_of_waveform_data_packet_record");
+            fseek_las(file, 227, SEEK_SET);
             fwrite(&set_start_of_waveform_data_packet_record, sizeof(I64), 1, file);
           }
           if (set_vlr_user_id_index != -1) {
             if (set_vlr_user_id_pos != -1) {
-              fseek(file, (long)set_vlr_user_id_pos, SEEK_SET);
+              fseek_las(file, set_vlr_user_id_pos, SEEK_SET);
               I32 len = (I32)strlen(set_vlr_user_id);
               for (i = 0; i < 16; i++) {
                 if (i < len) {
@@ -1125,14 +1122,14 @@ class LasTool_lasinfo : public LasTool {
           }
           if (set_vlr_record_id_index != -1) {
             if (set_vlr_record_id_pos != -1) {
-              fseek(file, (long)set_vlr_record_id_pos, SEEK_SET);
+              fseek_las(file, set_vlr_record_id_pos, SEEK_SET);
               U16 record_id = (U16)set_vlr_record_id;
               fwrite(&record_id, sizeof(U16), 1, file);
             }
           }
           if (set_vlr_description_index != -1) {
             if (set_vlr_description_pos != -1) {
-              fseek(file, (long)set_vlr_description_pos, SEEK_SET);
+              fseek_las(file, set_vlr_description_pos, SEEK_SET);
               I32 len = (I32)strlen(set_vlr_description);
               for (i = 0; i < 32; i++) {
                 if (i < len) {
@@ -1155,7 +1152,7 @@ class LasTool_lasinfo : public LasTool {
                   U32 set_geotiff_vlr_geo_keys_new_length = sizeof(GeoProjectionGeoKeys) * (number_of_keys + 1);
 
                   if (set_geotiff_vlr_geo_keys_new_length <= set_geotiff_vlr_geo_keys_length) {
-                    fseek(file, (long)set_geotiff_vlr_geo_keys_pos, SEEK_SET);
+                    fseek_las(file, set_geotiff_vlr_geo_keys_pos, SEEK_SET);
                     LASvlr_geo_keys vlr_geo_key_directory;
                     vlr_geo_key_directory.key_directory_version = 1;
                     vlr_geo_key_directory.key_revision = 1;
@@ -1168,14 +1165,14 @@ class LasTool_lasinfo : public LasTool {
                     }
 
                     if (set_geotiff_vlr_geo_double_pos != -1) {
-                      fseek(file, (long)set_geotiff_vlr_geo_double_pos, SEEK_SET);
+                      fseek_las(file, set_geotiff_vlr_geo_double_pos, SEEK_SET);
                       for (i = 0; i < (int)set_geotiff_vlr_geo_double_length; i++) {
                         fputc(0, file);
                       }
                     }
 
                     if (set_geotiff_vlr_geo_ascii_pos != -1) {
-                      fseek(file, (long)set_geotiff_vlr_geo_ascii_pos, SEEK_SET);
+                      fseek_las(file, set_geotiff_vlr_geo_ascii_pos, SEEK_SET);
                       for (i = 0; i < (int)set_geotiff_vlr_geo_ascii_length; i++) {
                         fputc(0, file);
                       }
@@ -1210,25 +1207,13 @@ class LasTool_lasinfo : public LasTool {
       }
 
       if (delete_empty && lasreadopener.get_file_name()) {
-#ifdef _WIN32
         LASMessage(LAS_VERBOSE, "delete check for '%s' with %lld points", lasreadopener.get_file_name(), lasreader->npoints);
-#else
-        laserror("deleting not implemented ...");
-#endif
         if (lasreader->npoints == 0) {
           lasreader->close();
-
-          std::string command(4096, '\0');
-          snprintf(command.data(), sizeof(command), "del \"%s\"", lasreadopener.get_file_name());
-          LASMessage(LAS_VERBOSE, "executing '%s'", command.c_str());
-
-          if (system(command.data()) != 0) {
-            laserror("failed to execute '%s'", command.c_str());
-          }
+          FileDelete(lasreadopener.get_file_name());
         } else {
           lasreader->close();
         }
-
         delete lasreader;
         continue;
       }
@@ -1577,6 +1562,24 @@ class LasTool_lasinfo : public LasTool {
                 lasheader->extended_number_of_points_by_return[14]);
           }
         }
+        if ((lasheader->version_major == 1) && (lasheader->version_minor >= 5)) {
+            if (json_out) {
+                lidardouble2string(printstring.data(), lasheader->max_gps_time);
+                json_sub_main_header_entries["max_gps_time"] = parseFormattedDouble(printstring.data());
+                lidardouble2string(printstring.data(), lasheader->min_gps_time);
+                json_sub_main_header_entries["min_gps_time"] = parseFormattedDouble(printstring.data());
+                json_sub_main_header_entries["time_offset"] = lasheader->time_offset;
+            }
+            else {
+                fprintf(file_out, "  max gps time:               ");
+                lidardouble2string(printstring.data(), lasheader->max_gps_time);
+                fprintf(file_out, "%s\012", printstring.c_str());
+                fprintf(file_out, "  min gps time:               ");
+                lidardouble2string(printstring.data(), lasheader->min_gps_time);
+                fprintf(file_out, "%s\012", printstring.c_str());
+                fprintf(file_out, "  time offset:                %d\012", lasheader->time_offset);
+            }
+        }
         if (lasheader->user_data_in_header_size) {
           if (json_out) {
             json_sub_main_header_entries["user_defined_bytes"] = lasheader->user_data_in_header_size;
@@ -1649,8 +1652,8 @@ class LasTool_lasinfo : public LasTool {
                     asciip = std::string(lasheader->vlr_geo_ascii_params);
                   };
                   geoprojectionconverter.GeoTiffInfo(
-                      (GeoProjectionGeoKeys*)&lasheader->vlr_geo_key_entries[j], 
-                          asciip, lasheader->vlr_geo_double_params, 
+                      (GeoProjectionGeoKeys*)&lasheader->vlr_geo_key_entries[j],
+                          asciip, lasheader->vlr_geo_double_params,
                           key, value);
                   if (json_out) {
                     json_geo_key_entry[CcToUnderline(key)] = value;
@@ -2040,12 +2043,10 @@ class LasTool_lasinfo : public LasTool {
                   fprintf(file_out, "    Octree with %d levels\012", max_octree_level);
                 }
 
-                U64 total = 0;
                 U64* point_count = (U64*)calloc(max_octree_level, sizeof(U64));
                 U32* voxel_count = (U32*)calloc(max_octree_level, sizeof(U32));
 
                 for (U32 j = 0; j < lasheader->number_of_copc_entries; j++) {
-                  total += lasheader->vlr_copc_entries[j].point_count;
                   point_count[lasheader->vlr_copc_entries[j].key.depth] += lasheader->vlr_copc_entries[j].point_count;
                   voxel_count[lasheader->vlr_copc_entries[j].key.depth]++;
                 }
@@ -2232,7 +2233,6 @@ class LasTool_lasinfo : public LasTool {
         if (file_out && !no_min_max && !json_out) fprintf(file_out, "reporting minimum and maximum for all LAS point record entries ...\012");
 
         // maybe seek to start position
-
         if (subsequence_start) lasreader->seek(subsequence_start);
 
         while (lasreader->read_point()) {
@@ -2241,6 +2241,7 @@ class LasTool_lasinfo : public LasTool {
           if (check_outside) {
             if (!lasreader->point.inside_bounding_box(
                     enlarged_min_x, enlarged_min_y, enlarged_min_z, enlarged_max_x, enlarged_max_y, enlarged_max_z)) {
+              // report each single point outside the bounding box
               outside_bounding_box++;
               if (file_out && report_outside) {
                 if (json_out) {
@@ -2256,17 +2257,27 @@ class LasTool_lasinfo : public LasTool {
                   json_outside_box["scan_direction_flag"] = lasreader->point.get_scan_direction_flag();
                   json_outside_box["edge_flight_line"] = lasreader->point.get_edge_of_flight_line();
                   json_outside_box["classification"] = lasreader->point.get_classification();
-                  json_outside_box["scan_angle_rank"] = lasreader->point.get_scan_angle_rank();
+                  json_outside_box["scan_angle"] = lasreader->point.get_scan_angle_disp();
                   json_outside_box["user_data"] = lasreader->point.get_user_data();
                   json_outside_box["point_source_id"] = lasreader->point.get_point_source_ID();
                   json_sub_main["points_outside_boundig_box"].push_back(json_outside_box);
                 } else {
                   fprintf(
-                      file_out, "%u t %g x %g y %g z %g i %d (%d of %d) d %d e %d c %d s %d %u p %d \012", (U32)(lasreader->p_idx - 1),
-                      lasreader->point.get_gps_time(), lasreader->point.get_x(), lasreader->point.get_y(), lasreader->point.get_z(),
-                      lasreader->point.get_intensity(), lasreader->point.get_return_number(), lasreader->point.get_number_of_returns(),
-                      lasreader->point.get_scan_direction_flag(), lasreader->point.get_edge_of_flight_line(), lasreader->point.get_classification(),
-                      lasreader->point.get_scan_angle_rank(), lasreader->point.get_user_data(), lasreader->point.get_point_source_ID());
+                      file_out, "%u t %g x %g y %g z %g i %d (%d of %d) d %d e %d c %d s %s %u p %d \012",
+                      (U32)(lasreader->p_idx - 1),
+                      lasreader->point.get_gps_time(),
+                      lasreader->point.get_x(),
+                      lasreader->point.get_y(),
+                      lasreader->point.get_z(),
+                      lasreader->point.get_intensity(),
+                      lasreader->point.get_return_number(),
+                      lasreader->point.get_number_of_returns(),
+                      lasreader->point.get_scan_direction_flag(),
+                      lasreader->point.get_edge_of_flight_line(),
+                      lasreader->point.get_classification(),
+                      lasreader->point.get_scan_angle_string().c_str(),
+                      lasreader->point.get_user_data(),
+                      lasreader->point.get_point_source_ID());
                 }
               }
             }
@@ -2325,8 +2336,8 @@ class LasTool_lasinfo : public LasTool {
             json_las_point_report["scan_direction_flag"]["max"] = static_cast<int>(lassummary.max.scan_direction_flag);
             json_las_point_report["classification"]["min"] = static_cast<int>(lassummary.min.classification);
             json_las_point_report["classification"]["max"] = static_cast<int>(lassummary.max.classification);
-            json_las_point_report["scan_angle_rank"]["min"] = lassummary.min.scan_angle_rank;
-            json_las_point_report["scan_angle_rank"]["max"] = lassummary.max.scan_angle_rank;
+            json_las_point_report["scan_angle"]["min"] = lassummary.min.get_scan_angle_disp();
+            json_las_point_report["scan_angle"]["max"] = lassummary.max.get_scan_angle_disp();
             json_las_point_report["user_data"]["min"] = lassummary.min.user_data;
             json_las_point_report["user_data"]["max"] = lassummary.max.user_data;
             json_las_point_report["point_source_id"]["min"] = lassummary.min.point_source_ID;
@@ -2341,7 +2352,7 @@ class LasTool_lasinfo : public LasTool {
             fprintf(file_out, "  edge_of_flight_line %d %10d\012", lassummary.min.edge_of_flight_line, lassummary.max.edge_of_flight_line);
             fprintf(file_out, "  scan_direction_flag %d %10d\012", lassummary.min.scan_direction_flag, lassummary.max.scan_direction_flag);
             fprintf(file_out, "  classification  %5d %10d\012", lassummary.min.classification, lassummary.max.classification);
-            fprintf(file_out, "  scan_angle_rank %5d %10d\012", lassummary.min.scan_angle_rank, lassummary.max.scan_angle_rank);
+            fprintf(file_out, "  scan_angle %10s %10s\012", lassummary.min.get_scan_angle_string().c_str(), lassummary.max.get_scan_angle_string().c_str());
             fprintf(file_out, "  user_data       %5d %10d\012", lassummary.min.user_data, lassummary.max.user_data);
             fprintf(file_out, "  point_source_ID %5d %10d\012", lassummary.min.point_source_ID, lassummary.max.point_source_ID);
           }
@@ -2432,8 +2443,8 @@ class LasTool_lasinfo : public LasTool {
               json_las_point_report["extended_number_of_returns"]["max"] = static_cast<int>(lassummary.max.extended_number_of_returns);
               json_las_point_report["extended_classification"]["min"] = lassummary.min.extended_classification;
               json_las_point_report["extended_classification"]["max"] = lassummary.max.extended_classification;
-              json_las_point_report["extended_scan_angle"]["min"] = lassummary.min.extended_scan_angle;
-              json_las_point_report["extended_scan_angle"]["max"] = lassummary.max.extended_scan_angle;
+              json_las_point_report["extended_scan_angle"]["min"] = lassummary.min.get_scan_angle_disp();
+              json_las_point_report["extended_scan_angle"]["max"] = lassummary.max.get_scan_angle_disp();
               json_las_point_report["extended_scanner_channel"]["min"] = static_cast<int>(lassummary.min.extended_scanner_channel);
               json_las_point_report["extended_scanner_channel"]["max"] = static_cast<int>(lassummary.max.extended_scanner_channel);
             } else {
@@ -2445,7 +2456,9 @@ class LasTool_lasinfo : public LasTool {
               fprintf(
                   file_out, "  extended_classification    %6d %6d\012", lassummary.min.extended_classification,
                   lassummary.max.extended_classification);
-              fprintf(file_out, "  extended_scan_angle        %6d %6d\012", lassummary.min.extended_scan_angle, lassummary.max.extended_scan_angle);
+              fprintf(
+                  file_out, "  extended_scan_angle %10s %10s\012",
+                    lassummary.min.get_scan_angle_string().c_str(), lassummary.max.get_scan_angle_string().c_str());
               fprintf(
                   file_out, "  extended_scanner_channel   %6d %6d\012", lassummary.min.extended_scanner_channel,
                   lassummary.max.extended_scanner_channel);
@@ -2925,7 +2938,7 @@ class LasTool_lasinfo : public LasTool {
           if (repair_counters) {
             if (lassummary.number_of_point_records <= U32_MAX) {
               U32 number_of_point_records = (U32)lassummary.number_of_point_records;
-              fseek(file, 107, SEEK_SET);
+              fseek_las(file, 107, SEEK_SET);
               fwrite(&number_of_point_records, sizeof(U32), 1, file);
               if (file_out) {
                 if (json_out) {
@@ -2957,7 +2970,7 @@ class LasTool_lasinfo : public LasTool {
               }
             } else if (lasheader->number_of_point_records != 0) {
               U32 number_of_point_records = 0;
-              fseek(file, 107, SEEK_SET);
+              fseek_las(file, 107, SEEK_SET);
               fwrite(&number_of_point_records, sizeof(U32), 1, file);
               if (file_out) {
                 if (json_out) {
@@ -3026,7 +3039,7 @@ class LasTool_lasinfo : public LasTool {
         } else if ((lasheader->point_data_format >= 6) && (lasheader->number_of_point_records != 0)) {
           if (repair_counters) {
             U32 number_of_point_records = 0;
-            fseek(file, 107, SEEK_SET);
+            fseek_las(file, 107, SEEK_SET);
             fwrite(&number_of_point_records, sizeof(U32), 1, file);
           }
           if (!no_warnings && file_out) {
@@ -3063,7 +3076,7 @@ class LasTool_lasinfo : public LasTool {
           if (lassummary.number_of_point_records != (I64)lasheader->extended_number_of_point_records) {
             if (repair_counters) {
               I64 extended_number_of_point_records = lassummary.number_of_point_records;
-              fseek(file, 235 + 12, SEEK_SET);
+              fseek_las(file, 235 + 12, SEEK_SET);
               fwrite(&extended_number_of_point_records, sizeof(I64), 1, file);
             }
             if (!no_warnings && file_out) {
@@ -3202,7 +3215,7 @@ class LasTool_lasinfo : public LasTool {
 
         if (repair_counters) {
           if (wrong_entry) {
-            fseek(file, 111, SEEK_SET);
+            fseek_las(file, 111, SEEK_SET);
             fwrite(&(number_of_points_by_return[0]), sizeof(U32), 5, file);
           } else if (file_out) {
             if (json_out) {
@@ -3264,7 +3277,7 @@ class LasTool_lasinfo : public LasTool {
 
           if (repair_counters) {
             if (wrong_entry) {
-              fseek(file, 235 + 20, SEEK_SET);
+              fseek_las(file, 235 + 20, SEEK_SET);
               fwrite(&(extended_number_of_points_by_return[0]), sizeof(I64), 15, file);
             } else if (file_out) {
               if (json_out) {
@@ -3586,7 +3599,7 @@ class LasTool_lasinfo : public LasTool {
           if (lasheader->get_z(lassummary.max.get_Z()) != lasheader->max_z) wrong_entry = true;
           if (lasheader->get_z(lassummary.min.get_Z()) != lasheader->min_z) wrong_entry = true;
           if (wrong_entry) {
-            fseek(file, 179, SEEK_SET);
+            fseek_las(file, 179, SEEK_SET);
             value = lasheader->get_x(lassummary.max.get_X());
             fwrite(&value, sizeof(double), 1, file);
             value = lasheader->get_x(lassummary.min.get_X());

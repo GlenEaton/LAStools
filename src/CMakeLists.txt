@@ -1,10 +1,11 @@
-if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+if(CMAKE_GNU_COMPILER_ID OR CMAKE_Clang_COMPILER_ID)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-format-security -Wno-format-truncation")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-security -Wno-format-truncation")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-security -Wno-format-truncation -std=c++17")
 endif()
-if (!MSVC)
+if (NOT(MSVC))
   add_compile_options(-Wno-deprecated -Wno-write-strings -Wno-unused-result)
 endif()
+
 add_definitions(-DNDEBUG )
 
 include_directories(../LASzip/include/laszip)
@@ -29,11 +30,11 @@ set(STANDALONE_TARGETS
 set(ALL_TARGETS ${GEOPROJECTION_TARGETS} ${STANDALONE_TARGETS})
 
 foreach(TARGET ${GEOPROJECTION_TARGETS})
-  add_executable(${TARGET} ${TARGET}.cpp wktparser.cpp geoprojectionconverter.cpp proj_loader.cpp)
+  add_executable(${TARGET} ${TARGET}.cpp wktparser.cpp geoprojectionconverter.cpp proj_loader.cpp proj_wrapper.cpp)
 endforeach(TARGET)
 
 foreach(TARGET ${STANDALONE_TARGETS})
-  add_executable(${TARGET} ${TARGET}.cpp proj_loader.cpp)
+  add_executable(${TARGET} ${TARGET}.cpp proj_loader.cpp proj_wrapper.cpp)
 endforeach(TARGET)
 
 foreach(TARGET ${ALL_TARGETS})

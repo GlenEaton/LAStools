@@ -161,8 +161,9 @@ struct LASfinalizer
 
     npoints = 0;
     finalized = false;
-    grid = new U32[ncols * nrows * nlays]();
-    memset((void*)grid, 0, ncols * nrows * nlays * sizeof(U32));
+    I64 total_elements = (I64)ncols * (I64)nrows * (I64)nlays;
+    grid = new U32[total_elements]();
+    memset((void*)grid, 0, total_elements * sizeof(U32));
   };
 
   ~LASfinalizer() { delete[] grid; };
@@ -179,7 +180,7 @@ struct LASfinalizer
   {
     finalized = false;
     I32 cell = cell_from_xyz(point->get_x(), point->get_y(), point->get_z());
-    if (grid[cell] == 0) throw std::runtime_error("internal error in the finalizer. Please report");
+    if (grid[cell] == 0) laserror("internal error in the finalizer. Please report");
     grid[cell]--;
     npoints--;
     finalized = grid[cell] == 0;
@@ -254,19 +255,21 @@ struct Octant
     point_size = 0;
     point_capacity = 0;
   };
-  ~Octant() {};
+  virtual ~Octant() {};
 
   void sort()
   {
     load();
-    qsort((void*)point_buffer, point_count, point_size, compare_buffers);
+    if (point_buffer) {
+      qsort((void*)point_buffer, point_count, point_size, compare_buffers);
+    }
   };
   I32 npoints() const { return point_count; };
 
   virtual void load() { return; };
-  virtual void open() { return; };
+  virtual void open(const char *) { return; };
   virtual void close(bool force) { return; };
-  virtual void reactivate() { return; }
+  virtual void reactivate(const char *) { return; }
   virtual void desactivate() { return; }
   virtual void clean() = 0;
   virtual void swap(LASpoint* laspoint, const I32 pos) = 0;
@@ -276,7 +279,7 @@ struct Octant
   U8* point_buffer;
   I32 point_count;
   I32 point_size;
-  I32 point_capacity;
+  I64 point_capacity;
   std::unordered_map<I32, VoxelRecord> occupancy;
 };
 
@@ -287,7 +290,8 @@ struct OctantInMemory : public Octant
     point_size = size;
     point_count = 0;
     point_capacity = 25000;
-    point_buffer = (U8*)malloc(point_capacity * point_size);
+
+    point_buffer = (U8*)malloc_las((size_t)point_capacity * (size_t)point_size);
     occupancy.reserve(point_capacity);
   };
 
@@ -299,10 +303,10 @@ struct OctantInMemory : public Octant
     if (point_count == point_capacity)
     {
       point_capacity *= 2;
-      point_buffer = (U8*)realloc_las(point_buffer, point_capacity * point_size);
+      point_buffer = (U8*)realloc_las(point_buffer, (size_t)point_capacity * (size_t)point_size);
     }
 
-    memcpy(point_buffer + point_count * point_size, buffer, point_size);
+    memcpy(point_buffer + (size_t)point_count * (size_t)point_size, buffer, point_size);
 
     // cell = -1 means that recording the location of the point is useless (save memory)
     if (cell >= 0) occupancy.insert({ cell, VoxelRecord(chunk, point_count) });
@@ -315,10 +319,10 @@ struct OctantInMemory : public Octant
     if (point_count == point_capacity)
     {
       point_capacity *= 2;
-      point_buffer = (U8*)realloc_las(point_buffer, point_capacity * point_size);
+      point_buffer = (U8*)realloc_las(point_buffer, (size_t)point_capacity * (size_t)point_size);
     }
 
-    laspoint->copy_to(point_buffer + point_count * point_size);
+    laspoint->copy_to(point_buffer + (size_t)point_count * (size_t)point_size);
 
     // cell = -1 means that recording the location of the point is useless (save memory)
     if (cell >= 0) occupancy.insert({ cell, VoxelRecord(chunk, point_count) });
@@ -328,12 +332,12 @@ struct OctantInMemory : public Octant
 
   void swap(LASpoint* laspoint, const I32 pos)
   {
-    U8* tmp = (U8*)malloc(point_size);
+    U8* tmp = (U8*)malloc_las(point_size);
     if (tmp != nullptr)
     {
       laspoint->copy_to(tmp);
-      laspoint->copy_from(point_buffer + pos * point_size);
-      memcpy(point_buffer + pos * point_size, tmp, point_size);
+      laspoint->copy_from(point_buffer + (size_t)pos * (size_t)point_size);
+      memcpy(point_buffer + (size_t)pos * (size_t)point_size, tmp, point_size);
       free(tmp);
     }
   };
@@ -365,13 +369,13 @@ struct OctantOnDisk : public Octant
     char suffix[32];
 
     size_t buffer_size = (strlen(dir) + 32) * sizeof(char);
-    filename_points = (char*)malloc(buffer_size);
+    filename_points = (char*)malloc_las(buffer_size);
     if (filename_points != 0) {
       strcpy_las(filename_points, buffer_size, dir);
       snprintf(suffix, sizeof(suffix), "points-%d-%d-%d-%d.bin", key.x, key.y, key.z, key.d);
       strcat_las(filename_points, buffer_size, suffix);
     }
-    filename_octant = (char*)malloc(buffer_size);
+    filename_octant = (char*)malloc_las(buffer_size);
     if (filename_octant != nullptr) {
       strcpy_las(filename_octant, buffer_size, dir);
       snprintf(suffix, sizeof(suffix), "octant-%d-%d-%d-%d.bin", key.x, key.y, key.z, key.d);
@@ -383,6 +387,7 @@ struct OctantOnDisk : public Octant
 
     occupancy.reserve(25000);
   };
+  virtual ~OctantOnDisk() = default;
 
   // No copy constructor. We don't want any copy of dynamically allocated U8* point_buffer.
   // Desallocation is performed manually with clean() at appropriate places
@@ -391,8 +396,13 @@ struct OctantOnDisk : public Octant
   {
     reactivate("r+b");
 
-    fwrite(buffer, point_size, 1, fp);
-
+    if (fwrite(buffer, point_size, 1, fp) != 1) {
+      if (ferror(fp)) {
+        laserror("Error during writing file: %s", strerror(errno));
+      } else {
+        laserror("Incomplete writing process");
+      }
+    }
     // cell = -1 means that recording the location of the point is useless (save memory)
     if (cell >= 0)
       occupancy.insert({ cell, VoxelRecord(chunk, point_count) });
@@ -406,11 +416,17 @@ struct OctantOnDisk : public Octant
   {
     reactivate("r+b");
 
-    U8* buffer = (U8*)malloc(point_size);
+    U8* buffer = (U8*)malloc_las(point_size);
     if (buffer != nullptr)
     {
       laspoint->copy_to(buffer);
-      fwrite(buffer, point_size, 1, fp);
+      if (fwrite(buffer, point_size, 1, fp) != 1) {
+        if (ferror(fp)) {
+          laserror("Error during writing file: %s", strerror(errno));
+        } else {
+          laserror("Incomplete writing process");
+        }
+      }
       free(buffer);
     }
 
@@ -427,17 +443,25 @@ struct OctantOnDisk : public Octant
   {
     reactivate("r+b");
 
-    U8* buffer1 = (U8*)malloc(point_size);
-    U8* buffer2 = (U8*)malloc(point_size);
+    U8* buffer1 = (U8*)malloc_las(point_size);
+    U8* buffer2 = (U8*)malloc_las(point_size);
     if (buffer1 != nullptr && buffer2 != nullptr) 
     {
-      fseek(fp, pos * point_size, SEEK_SET);
-      fread(buffer1, point_size, 1, fp);
+      fseek_las(fp, (I64)pos * (I64)point_size, SEEK_SET);
+      if (fread(buffer1, point_size, 1, fp) != 1) {
+        laserror("Error reading file: %s", strerror(errno));
+      }
       laspoint->copy_to(buffer2);
       laspoint->copy_from(buffer1);
-      fseek(fp, pos * point_size, SEEK_SET);
-      fwrite(buffer2, point_size, 1, fp);
-      fseek(fp, 0, SEEK_END);
+      fseek_las(fp, (I64)pos * (I64)point_size, SEEK_SET);
+      if (fwrite(buffer2, point_size, 1, fp) != 1) {
+        if (ferror(fp)) {
+          laserror("Error during writing file: %s", strerror(errno));
+        } else {
+          laserror("Incomplete writing process");
+        }
+      }
+      fseek_las(fp, 0, SEEK_END);
       free(buffer1);
       free(buffer2);
     }
@@ -450,22 +474,26 @@ struct OctantOnDisk : public Octant
     if (!active)
     {
       // read occupancy map from disk
-      I32 cell;
-      U16 buffid;
-      I32 posid;
       FILE* f = LASfopen(filename_octant, "rb");
       if (f == 0)
       {
         laserror("cannot open file '%s': %s", filename_octant, strerror(errno));
-        throw std::runtime_error("Unexpected I/O error.");
+      } else {       
+        while (true) {
+          I32 cell;
+          U16 buffid;
+          I32 posid;
+        
+          if (fread(&cell, sizeof(I32), 1, f) != 1) break;
+          if (fread(&buffid, sizeof(U16), 1, f) != 1) break;
+          if (fread(&posid, sizeof(I32), 1, f) != 1) break;
+        
+          occupancy[cell] = VoxelRecord(buffid, posid);
+        }
+        
+        if (ferror(f)) laserror("Error reading occupancy map from disk '%s': %s", filename_octant, strerror(errno));     
+        fclose(f);
       }
-      while (fread(&cell, sizeof(I32), 1, f))
-      {
-        fread(&buffid, sizeof(U16), 1, f);
-        fread(&posid, sizeof(I32), 1, f);
-        occupancy[cell] = VoxelRecord(buffid, posid);
-      }
-      fclose(f);
       remove(filename_octant);
     }
 
@@ -482,15 +510,16 @@ struct OctantOnDisk : public Octant
       if (f == 0)
       {
         laserror("cannot open file '%s': %s", filename_octant, strerror(errno));
-        throw std::runtime_error("Unexpected I/O error.");
+      } else {
+        for (const auto& e : occupancy)
+        {
+          if (fwrite(&e.first, sizeof(I32), 1, f) != 1) break;
+          if (fwrite(&e.second.bufid, sizeof(U16), 1, f) != 1) break;
+          if (fwrite(&e.second.posid, sizeof(I32), 1, f) != 1) break;
+        }
+        if (ferror(f)) laserror("Error during writing file '%s': %s", filename_octant, strerror(errno));
+        fclose(f);
       }
-      for (const auto& e : occupancy)
-      {
-        fwrite(&e.first, sizeof(I32), 1, f);
-        fwrite(&e.second.bufid, sizeof(U16), 1, f);
-        fwrite(&e.second.posid, sizeof(I32), 1, f);
-      }
-      fclose(f);
 
       // clear occupancy grid
       occupancy.clear();
@@ -505,15 +534,21 @@ struct OctantOnDisk : public Octant
 
   void load()
   {
-    if (point_buffer) throw std::runtime_error("ERROR: internal error load() has been called twice. Please report.");
+    if (point_buffer) laserror("internal error load() has been called twice. Please report.");
 
     reactivate("r+b");
 
-    point_buffer = (U8*)malloc(point_count * point_size);
+    size_t size = (size_t)point_count * (size_t)point_size;
+    point_buffer = (U8*)malloc_las(size);
+
     if (point_buffer != nullptr)
     {
-      fseek(fp, 0, SEEK_SET);
-      fread(point_buffer, point_size, point_count, fp);
+      fseek_las(fp, 0, SEEK_SET);
+      if (fread(point_buffer, point_size, point_count, fp) != (size_t)point_count) {
+        laserror("Error reading file: %s", strerror(errno));
+      }
+    } else {
+      laserror("Memory allocation failed: requested %zu bytes for %d points: %s", size, point_count, strerror(errno));
     }
 
     close();
@@ -548,9 +583,8 @@ struct OctantOnDisk : public Octant
       if (fp == 0)
       {
         laserror("cannot open file '%s': %s", filename_points, strerror(errno));
-        throw std::runtime_error("Unexpected I/O error.");
       }
-      fseek(fp, 0, SEEK_END);
+      fseek_las(fp, 0, SEEK_END);
       num_connexions++;
     }
   }
@@ -596,12 +630,11 @@ int main(int argc, char* argv[])
   U32 seed = 0;
   I64 num_points = 0;
   I32 max_depth = -1;
-  BOOL error = FALSE;
   U32 max_points_per_octant = 100000; // not absolute, only used to estimate the depth.
   I32 min_points_per_octant = 100;    // not absolute, use to (maybe) remove too small chunks
   F32 occupancy_resolution = 50;
   F32 proba_swap_event = 0.95F;
-  I32 num_points_buffer = 1000000; // Approx 40 MB
+  U32 num_points_buffer = 1000000; // Approx 40 MB
   CHAR* tmpdir = 0;
   I32 max_files_opened = (I32)(0.5 * MAX_FOPEN);
   const I32 limit_depth = 10;
@@ -847,12 +880,10 @@ int main(int argc, char* argv[])
     if (laswriteopener.get_file_name())
     {
       CHAR* file_name = LASCopyString(laswriteopener.get_file_name());
-      I32 len = (I32)strlen(file_name);
-      while ((len >= 0) && (file_name[len] != '.')) len--;
-      if ((strncmp(file_name + len, ".las", 4) == 0) || (strncmp(file_name + len, ".LAS", 4) == 0))
+      if (HasFileExt(std::string(file_name),"las"))
       {
-        LASMessage(LAS_WARNING, "output file has wrong extension. COPC files must be LAZ files. Output was renamed automatically.");
-        len = (I32)strlen(file_name);
+        LASMessage(LAS_WARNING, "Output file has wrong extension. COPC files must be LAZ files. Output was renamed automatically.");
+        int len = (I32)strlen(file_name);
         if (file_name[len - 1] == 'S') file_name[len - 1] = 'Z'; else file_name[len - 1] = 'z';
         laswriteopener.set_file_name(file_name);
       }
@@ -860,7 +891,6 @@ int main(int argc, char* argv[])
     }
 
     // replace the extension with ".copc.laz" (not mandatory by the standard but nicer).
-
     if (laswriteopener.get_file_name())
     {
       if (!strstr(laswriteopener.get_file_name(), ".copc.laz"))
@@ -869,7 +899,7 @@ int main(int argc, char* argv[])
         char* file_name;
         const char* extension = ".copc.laz";
         size_t buffer_size = (strlen(file_name_base) + 10) * sizeof(char);
-        file_name = (char*)malloc(buffer_size);
+        file_name = (char*)malloc_las(buffer_size);
         if (file_name != 0) {
           strcpy_las(file_name, buffer_size, file_name_base);
           strcat_las(file_name, buffer_size, extension);
@@ -881,7 +911,6 @@ int main(int argc, char* argv[])
     }
 
     // make sure we do not corrupt the input file
-
     if (lasreadopener.get_file_name() && laswriteopener.get_file_name() && (strcmp(lasreadopener.get_file_name(), laswriteopener.get_file_name()) == 0))
     {
       laserror("input and output file name are identical: '%s'", lasreadopener.get_file_name());
@@ -970,9 +999,9 @@ int main(int argc, char* argv[])
       }
 
       // Estimate the binomial probabilities for point swapping. See algorithm implementation details
-      F64 area = occupancy_resolution * occupancy_resolution * lasoccupancygrid->get_num_occupied();
-      F64 density = num_points / area;
-      F64 voxel_sizes = octree.get_size() / octree.get_gridsize();
+      F64 area = (F64)occupancy_resolution * (F64)occupancy_resolution * (F64)lasoccupancygrid->get_num_occupied();
+      F64 density = (F64)num_points / area;
+      F64 voxel_sizes = octree.get_size() / (F64)octree.get_gridsize();
       F64 swap_probabilities[limit_depth + 1];
       for (i = 0; i <= limit_depth; i++)
       {
@@ -985,7 +1014,7 @@ int main(int argc, char* argv[])
       delete lasinventory;
 
       U64 t1 = taketime();
-      if (get_message_log_level() >= LAS_VERBOSE) {
+      if (get_message_log_level() <= LAS_VERBOSE) {
         LASMessage(LAS_VERBOSE, "Area covered: %.0lf", area);
         LASMessage(LAS_VERBOSE, "Number of points: %llu", num_points);
         LASMessage(LAS_VERBOSE, "Density of points: %.1lf", density);
@@ -1120,7 +1149,7 @@ int main(int argc, char* argv[])
         for (U32 i = lasreader->header.number_of_variable_length_records - 1; i > 0; i--) lasreader->header.vlrs[i] = lasreader->header.vlrs[i - 1];
         memset((void*)&(lasreader->header.vlrs[0]), 0, sizeof(LASvlr));
         lasreader->header.vlrs[0].reserved = 0;
-        strncpy_las(lasreader->header.vlrs[0].user_id, sizeof(lasreader->header.vlrs[0].user_id), "copc", sizeof(lasreader->header.vlrs[0].user_id));
+        strncpy_las(lasreader->header.vlrs[0].user_id, sizeof(lasreader->header.vlrs[0].user_id), "copc");
         lasreader->header.vlrs[0].record_id = 1;
         lasreader->header.vlrs[0].record_length_after_header = sizeof(LASvlr_copc_info);
         lasreader->header.offset_to_point_data += lasreader->header.vlrs[0].record_length_after_header;
@@ -1157,9 +1186,9 @@ int main(int argc, char* argv[])
 
       // Buffer of points
       U32 elem_size = laspoint->total_point_size;
-      I32 buffer_size = 0;
-      U8* buffer = (U8*)malloc(num_points_buffer * elem_size);
-      U8* temp = (U8*)malloc(elem_size);
+      size_t buffer_size = 0;
+      U8* buffer = (U8*)malloc_las((size_t)num_points_buffer * (size_t)elem_size);
+      U8* temp = (U8*)malloc_las(elem_size);
 
       // EPT hierarchy
       std::vector<LASvlr_copc_entry> entries;
@@ -1200,7 +1229,7 @@ int main(int argc, char* argv[])
         if (!skip)
         {
           *laspoint = lasreader->point; // Conversion to target format
-          laspoint->copy_to(buffer + buffer_size * elem_size);
+          laspoint->copy_to(buffer + buffer_size * (size_t)elem_size);
           buffer_size++;
           progressbar++;
           progressbar.print();
@@ -1212,11 +1241,11 @@ int main(int argc, char* argv[])
           // First, we shuffle the points
           if (shuffle)
           {
-            for (i = 0; i < buffer_size; i++)
+            for (size_t j = 0; j < buffer_size; j++)
             {
-              I32 j = rand() % buffer_size;
-              U8* block1 = buffer + i * elem_size;
-              U8* block2 = buffer + j * elem_size;
+              size_t j2 = rand() % buffer_size;
+              U8* block1 = buffer + j * (size_t)elem_size;
+              U8* block2 = buffer + j2 * (size_t)elem_size;
               memcpy(temp, block1, elem_size);
               memcpy(block1, block2, elem_size);
               memcpy(block2, temp, elem_size);
@@ -1224,9 +1253,9 @@ int main(int argc, char* argv[])
           }
 
           // We put the incoming points (coming in a random order) in the octree
-          for (i = 0; i < buffer_size; i++)
+          for (size_t j = 0; j < buffer_size; j++)
           {
-            laspoint->copy_from(buffer + i * elem_size);
+            laspoint->copy_from(buffer + j * (size_t)elem_size);
             lasfinalizer.remove(laspoint);
 
             // Search a place to insert the point
@@ -1328,7 +1357,7 @@ int main(int argc, char* argv[])
 
                       it->second->load();
                       for (I32 k = 0; k < it->second->npoints(); k++)
-                        it2->second->insert(it->second->point_buffer + k * elem_size, -1, id_buffer);
+                        it2->second->insert(it->second->point_buffer + (size_t)k * (size_t)elem_size, -1, id_buffer);
 
                       it->second->clean();
 
@@ -1370,7 +1399,7 @@ int main(int argc, char* argv[])
                 // Write the chunk
                 for (I32 k = 0; k < it->second->npoints(); k++)
                 {
-                  laspoint->copy_from(it->second->point_buffer + k * elem_size);
+                  laspoint->copy_from(it->second->point_buffer + (size_t)k * (size_t)elem_size);
                   laswriter->write_point(laspoint);
                   laswriter->update_inventory(laspoint);
 
@@ -1382,7 +1411,10 @@ int main(int argc, char* argv[])
                 LASMessage(LAS_VERY_VERBOSE, "[%.0lf%%] Octant %d-%d-%d-%d written in COPC file", progressbar.get_progress(), it->first.d, it->first.x, it->first.y, it->first.z);
 
                 // Record the VLR entry
-                entry.byte_size = (I32)(laswriter->tell() - entry.offset);
+                I64 current_pos = laswriter->tell();
+                if (current_pos < 0) laserror("Error determining file position when writing chunks to file: %s", strerror(errno));
+                if (entry.offset > (size_t)current_pos) laserror("Error: offset(% llu) greater than file position(% lld) when writing chunks", entry.offset, current_pos);
+                entry.byte_size = (U32)(current_pos - entry.offset);
                 entries.push_back(entry);
 
                 // We will never see this octant again. Goodbye.
@@ -1398,7 +1430,7 @@ int main(int argc, char* argv[])
           id_buffer++;
           buffer_size = 0;
 
-          if (get_message_log_level() >= LAS_VERBOSE)
+          if (get_message_log_level() <= LAS_VERBOSE)
           {
             F32 million = (F32)((U64)num_points_buffer * id_buffer / 1000000.0);
             fprintf(stderr, "[%.0lf%%] Processed %.1f million points | LAZ chunks written: %u", progressbar.get_progress(), million, (U32)entries.size());
@@ -1442,22 +1474,25 @@ int main(int argc, char* argv[])
       free(tmpdir);
 
       U64 t5 = taketime();
-      if (get_message_log_level() >= LAS_VERBOSE)
+      if (get_message_log_level() <= LAS_VERBOSE)
       {
         U32 num_chunks = (U32)entries.size();
         U32 num_chunks_few_points = 0;
         I32 highest_num_points = 0;
+        U32 highest_byte_size = 0;
         I32 lowest_num_points = I32_MAX;
         for (const auto& chunk : entries)
         {
           if (chunk.point_count > highest_num_points) highest_num_points = chunk.point_count;
+          if (chunk.byte_size > highest_byte_size) highest_byte_size = chunk.byte_size;
           if (chunk.point_count < lowest_num_points) lowest_num_points = chunk.point_count;
           if (chunk.point_count <= (I32)min_points_per_octant) num_chunks_few_points++;
         }
         LASMessage(LAS_VERBOSE, "Number of chunks: %u", num_chunks);
-        LASMessage(LAS_VERBOSE, "Highest number of points in a chunk: %u", highest_num_points);
-        LASMessage(LAS_VERBOSE, "Lowest number of points in a chunk: %u", lowest_num_points);
-        LASMessage(LAS_VERBOSE, "Number of chunks with less than %u points: %u", min_points_per_octant, num_chunks_few_points);
+        LASMessage(LAS_VERBOSE, "Highest number of points in a chunk: %d", highest_num_points);
+        LASMessage(LAS_VERBOSE, "Lowest number of points in a chunk: %d", lowest_num_points);
+        LASMessage(LAS_VERBOSE, "Maximum byte size per chunk: %u", highest_byte_size);
+        LASMessage(LAS_VERBOSE, "Number of chunks with less than %d points: %u", min_points_per_octant, num_chunks_few_points);
         LASMessage(LAS_VERBOSE, "Pass 2 took %u sec.\n", (U32)(t5 - t4));
         LASMessage(LAS_VERBOSE, "Total time: %u sec.", (U32)(t5 - t0));
       }
@@ -1466,7 +1501,6 @@ int main(int argc, char* argv[])
     catch (std::exception& e)
     {
       laserror("%s", e.what());
-      error = true;
     }
     catch (...)
     {

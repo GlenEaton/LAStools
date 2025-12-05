@@ -453,27 +453,13 @@ BOOL LASwriterTXT::write_point(const LASpoint* point)
         fprintf(file, "%d", point->get_intensity());
       break;
     case 'a': // the scan angle
-      fprintf(file, "%d", point->get_scan_angle_rank());
+      fprintf(file, "%s", point->get_scan_angle_string().c_str());
       break;
     case 'r': // the number of the return
       fprintf(file, "%d", point->get_return_number());
       break;
     case 'c': // the classification
-			if (header->point_data_format > 5)
-			{
-				if (point->get_extended_classification())
-				{
-      fprintf(file, "%d", point->get_extended_classification());
-				}
-				else
-				{
-					fprintf(file, "%d", point->get_classification());
-				}
-			}
-			else
-			{
-				fprintf(file, "%d", point->get_classification());
-			}
+  		fprintf(file, "%d", point->get_classification());
       break;
     case 'u': // the user data
       fprintf(file, "%d", point->get_user_data());
@@ -568,7 +554,7 @@ BOOL LASwriterTXT::update_header(const LASheader* header, BOOL use_inventory, BO
 
 I64 LASwriterTXT::close(BOOL update_header)
 {
-  U32 bytes = (U32)ftell(file);
+  I64 bytes = ftell_las(file);
 
   if (file)
   {

@@ -70,12 +70,13 @@
 */
 #pragma once
 
-#include "proj_loader.h"
+#include "proj_wrapper.h"
 #include <stdio.h>
 #include <string>
 #include <algorithm>
 #include "lasdefinitions.hpp"
 #include "wktparser.h"
+#include "lasreader.hpp"
 
 struct GeoProjectionGeoKeys {
   unsigned short key_id;
@@ -470,7 +471,6 @@ public:
   bool to_lon_lat_ele(const double* point, double& longitude, double& latitude, double& elevation_in_meter) const;
 
   // from current projection to target projection
-
   bool to_target(double* point) const;
   bool to_target(const double* point, double& x, double& y, double& elevation) const;
 
@@ -489,12 +489,14 @@ public:
   bool set_dtm_projection_parameters(short horizontal_units, short vertical_units, short coordinate_system, short coordinate_zone, short horizontal_datum, short vertical_datum, bool source=true);
 
   // using PROJ lib
+  void load_proj();
   void set_proj_crs_transform();
   void set_proj_crs_with_epsg(unsigned int& epsg_code, bool source = true);
   void set_proj_crs_with_string(const char* proj_string, bool source = true);
   void set_proj_crs_with_json(const char* json_filename, bool source = true);
   void set_proj_crs_with_wkt(const char* wkt_filename, bool source = true);
   void set_proj_crs_with_file_header_wkt(const char* wktContent, bool source = true);
+  void get_wkt_from_proj(CHAR*& ogc_wkt_out, GeoProjectionConverter& geoprojectionconverter, LASreader* lasreader);
    
   // helps us to find the 'pcs.csv' file
   char* argv_zero;
@@ -519,6 +521,16 @@ private:
   int datum_code;
   char datum_name[60];
   int spheroid_code;
+
+  //PROJ options 
+  unsigned int source_code;
+  unsigned int target_code;
+  char* proj_source_string;
+  char* proj_target_string;
+  char* proj_source_json;
+  char* proj_target_json;
+  char* proj_source_wkt;
+  char* proj_target_wkt;
 
   // parameters for the reference ellipsoid
   GeoProjectionEllipsoid* ellipsoid;

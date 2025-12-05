@@ -57,7 +57,7 @@ LASwriter* LASwriteOpener::open(const LASheader* header)
   if (use_nil)
   {
     LASwriterLAS* laswriterlas = new LASwriterLAS();
-    if (!laswriterlas->open(header, (format == LAS_TOOLS_FORMAT_LAZ ? (native ? LASZIP_COMPRESSOR_LAYERED_CHUNKED : LASZIP_COMPRESSOR_CHUNKED) : LASZIP_COMPRESSOR_NONE), 2, chunk_size))
+    if (!laswriterlas->open(header, (format == LAS_TOOLS_FORMAT_LAZ ? (native ? LASZIP_COMPRESSOR_LAYERED_CHUNKED : LASZIP_COMPRESSOR_CHUNKED) : LASZIP_COMPRESSOR_NONE), requested_version, chunk_size))
     {
       laserror("cannot open laswriterlas to NULL");
       delete laswriterlas;
@@ -70,7 +70,7 @@ LASwriter* LASwriteOpener::open(const LASheader* header)
     if (format <= LAS_TOOLS_FORMAT_LAZ)
     {
       LASwriterLAS* laswriterlas = new LASwriterLAS();
-      if (!laswriterlas->open(file_name, header, (format == LAS_TOOLS_FORMAT_LAZ ? (native ? LASZIP_COMPRESSOR_LAYERED_CHUNKED : LASZIP_COMPRESSOR_CHUNKED) : LASZIP_COMPRESSOR_NONE), 2, chunk_size, io_obuffer_size))
+      if (!laswriterlas->open(file_name, header, (format == LAS_TOOLS_FORMAT_LAZ ? (native ? LASZIP_COMPRESSOR_LAYERED_CHUNKED : LASZIP_COMPRESSOR_CHUNKED) : LASZIP_COMPRESSOR_NONE), requested_version, chunk_size, io_obuffer_size))
       {
         laserror("cannot open laswriterlas with file name '%s'", file_name);
         delete laswriterlas;
@@ -136,7 +136,7 @@ LASwriter* LASwriteOpener::open(const LASheader* header)
     if (format <= LAS_TOOLS_FORMAT_LAZ)
     {
       LASwriterLAS* laswriterlas = new LASwriterLAS();
-      if (!laswriterlas->open(stdout, header, (format == LAS_TOOLS_FORMAT_LAZ ? (native ? LASZIP_COMPRESSOR_LAYERED_CHUNKED : LASZIP_COMPRESSOR_CHUNKED) : LASZIP_COMPRESSOR_NONE), 2, chunk_size))
+      if (!laswriterlas->open(stdout, header, (format == LAS_TOOLS_FORMAT_LAZ ? (native ? LASZIP_COMPRESSOR_LAYERED_CHUNKED : LASZIP_COMPRESSOR_CHUNKED) : LASZIP_COMPRESSOR_NONE), requested_version, chunk_size))
       {
         laserror("cannot open laswriterlas to stdout");
         delete laswriterlas;
@@ -460,9 +460,9 @@ BOOL LASwriteOpener::set_directory(const CHAR* directory)
 
     if ((len > 0) && (this->directory[len-1] != ':'))
     {
-      struct stat info;
+      las_stat_t info;
 
-      if (stat(this->directory, &info) != 0)
+      if (stat_las(this->directory, &info) != 0)
       {
         return FALSE;
       }
@@ -549,7 +549,7 @@ void LASwriteOpener::set_file_name(const CHAR* file_name)
     }
     else
     {
-      CHAR* temp_file_name = (CHAR*)malloc(len + (format == LAS_TOOLS_FORMAT_QFIT ? 4 : (format == LAS_TOOLS_FORMAT_JSON ? 6 : 5)));
+      CHAR* temp_file_name = (CHAR*)malloc_las(len + (format == LAS_TOOLS_FORMAT_QFIT ? 4 : (format == LAS_TOOLS_FORMAT_JSON ? 6 : 5)));
       if (temp_file_name) 
       {
         strcpy(temp_file_name, this->file_name);
@@ -783,6 +783,16 @@ void LASwriteOpener::set_force(BOOL force)
   this->force = force;
 }
 
+// current default item version: 2 for point types 0-5, 3 for point types 6-10 (will be automatically selected. 
+// using version 4 is for the new, slightly fixed encoding of point types 6-10 
+// (not the default, so the supporting software can be spread first, along with LAS 1.5)
+void LASwriteOpener::set_requested_version(U32 requested_version ) 
+{
+    this->requested_version = requested_version;
+}
+
+
+
 void LASwriteOpener::set_chunk_size(U32 chunk_size)
 {
   this->chunk_size = chunk_size;
@@ -795,7 +805,7 @@ void LASwriteOpener::make_numbered_file_name(const CHAR* file_name, I32 digits)
   {
     if (this->file_name != 0) free(this->file_name);
     len = (I32)strlen(file_name);
-    this->file_name = (CHAR*)malloc(len + digits + 2);
+    this->file_name = (CHAR*)malloc_las(len + digits + 2);
     if (this->file_name) strcpy(this->file_name, file_name);
   }
   else
@@ -840,7 +850,7 @@ void LASwriteOpener::make_file_name(const CHAR* file_name, I32 file_number)
     {
       if (this->file_name) free(this->file_name);
       len = (I32)strlen(file_name);
-      this->file_name = (CHAR*)malloc(len+10);
+      this->file_name = (CHAR*)malloc_las(len + 10);
       strcpy(this->file_name, file_name);
       if (cut)
       {
@@ -877,7 +887,7 @@ void LASwriteOpener::make_file_name(const CHAR* file_name, I32 file_number)
     if (file_name)
     {
       len = (I32)strlen(file_name);
-      this->file_name = (CHAR*)malloc(len + (appendix ? strlen(appendix) + 5 : 10));
+      this->file_name = (CHAR*)malloc_las(len + (appendix ? strlen(appendix) + 5 : 10));
       strcpy(this->file_name, file_name);
       while (len > 0 && this->file_name[len] != '.') len--;
       if (cut)
@@ -1020,7 +1030,7 @@ CHAR* LASwriteOpener::get_file_name_base() const
   else if (directory)
   {
     I32 len = (I32)strlen(directory);
-    file_name_base = (CHAR*)malloc(len+2);
+    file_name_base = (CHAR*)malloc_las(len + 2);
     snprintf(file_name_base, len + 2, "%s%c", directory, DIRECTORY_SLASH);
   }
 
@@ -1083,27 +1093,24 @@ I32 LASwriteOpener::get_format() const
   }
   else
   {
-    if (strstr(file_name, ".laz") || strstr(file_name, ".LAZ"))
-    {
+    if (HasFileExt(std::string(file_name), ".laz")) {
       return LAS_TOOLS_FORMAT_LAZ;
-    }
-    else if (strstr(file_name, ".las") || strstr(file_name, ".LAS"))
+    } else if (HasFileExt(std::string(file_name), ".las"))
     {
       return LAS_TOOLS_FORMAT_LAS;
-    }
-    else if (strstr(file_name, ".bin") || strstr(file_name, ".BIN")) // terrasolid
+    } else if (HasFileExt(std::string(file_name), ".bin"))  // terrasolid
     {
       return LAS_TOOLS_FORMAT_BIN;
     }
-    else if (strstr(file_name, ".qi") || strstr(file_name, ".QI")) // QFIT
+    else if (HasFileExt(std::string(file_name), ".qi")) // QFIT
     {
       return LAS_TOOLS_FORMAT_QFIT;
     }
-    else if (strstr(file_name, ".wrl") || strstr(file_name, ".WRL")) // VRML
+    else if (HasFileExt(std::string(file_name), ".wrl")) // VRML
     {
       return LAS_TOOLS_FORMAT_VRML;
     }
-    else if (strstr(file_name, ".json") || strstr(file_name, ".JSON"))  // json
+    else if (HasFileExt(std::string(file_name), ".json"))  // json
     {
       return LAS_TOOLS_FORMAT_JSON;
     }
@@ -1159,7 +1166,7 @@ void LASwriteOpener::add_directory(const CHAR* directory)
     I32 len = (I32)strlen(file_name);
     while ((len > 0) && (file_name[len] != '\\') && (file_name[len] != '/') && (file_name[len] != ':')) len--;
     if (len > 0) len++;
-    CHAR* new_file_name = (CHAR*)malloc(strlen(directory) + strlen(&(file_name[len])) + 5);
+    CHAR* new_file_name = (CHAR*)malloc_las(strlen(directory) + strlen(&(file_name[len])) + 5);
     snprintf(new_file_name, strlen(directory) + strlen(&(file_name[len])) + 5, "%s%c%s", directory, DIRECTORY_SLASH, &(file_name[len]));
     free(file_name);
     file_name = new_file_name;
@@ -1173,7 +1180,7 @@ void LASwriteOpener::add_appendix(const CHAR* appendix)
   if (file_name && appendix)
   {
     I32 len = (I32)strlen(file_name);
-    CHAR* new_file_name = (CHAR*)malloc(len + strlen(appendix) + 5);
+    CHAR* new_file_name = (CHAR*)malloc_las(len + strlen(appendix) + 5);
     while ((len > 0) && (file_name[len] != '.') && (file_name[len] != '\\') && (file_name[len] != '/') && (file_name[len] != ':')) len--;
 
     if ((len == 0) || (file_name[len] == '\\') || (file_name[len] == '/') || (file_name[len] == ':'))
@@ -1197,16 +1204,16 @@ void LASwriteOpener::add_appendix(const CHAR* appendix)
 void LASwriteOpener::cut_characters() {
   if (file_name && cut)
   {
-    I32 len = (I32)strlen(file_name);
-    I32 new_len = (len > cut) ? (len - cut) : 0;
-    CHAR* new_file_name = (CHAR*)malloc(new_len + 5);
+    size_t len = strlen(file_name);
+    size_t new_len = (len > cut) ? (len - cut) : 0;
+    CHAR* new_file_name = (CHAR*)malloc_las(new_len + 5);
     while ((len > 0) && (file_name[len] != '.') && (file_name[len] != '\\') && (file_name[len] != '/') && (file_name[len] != ':')) len--;
 
     if (new_file_name)
     {
       if ((len == 0) || (file_name[len] == '\\') || (file_name[len] == '/') || (file_name[len] == ':'))
       {
-        len = (I32)strlen(file_name);
+        len = strlen(file_name);
         memcpy(new_file_name, file_name, new_len);
       }
       else
@@ -1242,6 +1249,7 @@ LASwriteOpener::LASwriteOpener()
   chunk_size = LASZIP_CHUNK_SIZE_DEFAULT;
   use_stdout = FALSE;
   use_nil = FALSE;
+  requested_version = 0;
 }
 
 LASwriteOpener::~LASwriteOpener()

@@ -1,5 +1,6 @@
-if (!MSVC)
-	add_compile_options(-Wno-deprecated -Wno-write-strings -Wno-unused-result -std=c++11)
+if(CMAKE_GNU_COMPILER_ID OR CMAKE_Clang_COMPILER_ID)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-format-security -Wno-format-truncation")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-security -Wno-format-truncation -std=c++17")
 endif()
 add_definitions(-DNDEBUG -DUNORDERED -DHAVE_UNORDERED_MAP)
 

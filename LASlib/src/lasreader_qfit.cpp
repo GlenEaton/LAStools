@@ -60,7 +60,7 @@ BOOL LASreaderQFIT::open(const char* file_name)
   // create input stream
 
   ByteStreamIn* in;
-  if (IS_LITTLE_ENDIAN())
+  if (Endian::IS_LITTLE_ENDIAN)
     in = new ByteStreamInFileLE(file);
   else
     in = new ByteStreamInFileBE(file);
@@ -144,7 +144,7 @@ BOOL LASreaderQFIT::open(ByteStreamIn* stream)
   if (version == 40 || version == 48 || version == 56)
   {
     little_endian = TRUE;
-    endian_swap = (IS_LITTLE_ENDIAN() == FALSE);
+    endian_swap = (Endian::IS_LITTLE_ENDIAN == FALSE);
   }
   else
   {
@@ -152,7 +152,7 @@ BOOL LASreaderQFIT::open(ByteStreamIn* stream)
     if (version == 40 || version == 48 || version == 56)
     {
       little_endian = FALSE;
-      endian_swap = (IS_LITTLE_ENDIAN() == TRUE);
+      endian_swap = (Endian::IS_LITTLE_ENDIAN == TRUE);
     }
     else
     {
@@ -342,8 +342,7 @@ BOOL LASreaderQFIT::read_point_default()
     point.set_Y(buffer[1]);
     point.set_Z(buffer[3]);
     point.intensity = buffer[5];
-    point.scan_angle_rank = I8_CLAMP(I16_QUANTIZE((0.001*buffer[6])-180.0));
-
+    point.set_scan_angle(0.001*buffer[6]-180.0);
     point.set_attribute(scan_azimuth_start, (I32)buffer[6]);
     point.set_attribute(pitch_start, (I32)buffer[7]);
     point.set_attribute(roll_start, (I32)buffer[8]);
@@ -421,7 +420,7 @@ BOOL LASreaderQFIT::reopen(const char* file_name)
 
   // create input stream
 
-  if (IS_LITTLE_ENDIAN())
+  if (Endian::IS_LITTLE_ENDIAN)
     stream = new ByteStreamInFileLE(file);
   else
     stream = new ByteStreamInFileBE(file);

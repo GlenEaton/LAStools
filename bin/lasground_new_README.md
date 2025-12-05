@@ -143,7 +143,6 @@ lasground_new64 -i *.laz -v -odir ground_classified -olaz -cores 8
 -bulge [n]                    : bulge sloped neighbourhoods of TIN triangles by [n]{default=step/10}  
 -compute_height               : compute height of each point  
 -cutoff_z_above [z]           : points above elevation [z] are completely excluded from ground search  
--down_spike [n]               : remove down spikes > [n] centimeter  
 -extra_pass                   : do extra read pass to count points (only makes sense when filtering)  
 -ground_class [n]             : use class [n] for ground class (default=2)  
 -ignore_class [m] [n] [o] ... : ignores points with classification codes [m] [n] [o] ...  
@@ -163,11 +162,12 @@ lasground_new64 -i *.laz -v -odir ground_classified -olaz -cores 8
 -olaydir [dir]                : write the output *.lay file in directory [dir]  
 -pertube                      : optional pertube x/y values by random value  
 -refine [n]                   : set number of refinement loops to [n]{default=40}  
--remain_buffered              : write all data to the output, even if they are part of a boundary buffer  
+-remain_buffered              : write on-the-fly buffer to the output
 -replace_z                    : replace z value with computed height  
 -skip_files                   : skip (instead of the default copy) files that have an insufficient number of ground points  
--spike [n]                    : remove up and down spikes > [n] centimeter  
--spike_down [n]               : remove down spikes > [n] centimeter  
+-spike [n]                    : remove up and down spikes > [n] meters {default = 1 meter}  
+-spike_down [n]               : remove down spikes > [n] meters  
+-down_spike [n]               : remove down spikes > [n] meters  
 -stddev [n]                   : set maximal standard deviation of [n]{meter} for planar patches  
 -store_in_user_data           : store computed height in user data  
 -week_to_adjusted [n]         : converts time stamps from GPS week [n] to Adjusted Standard GPS  
@@ -193,7 +193,6 @@ lasground_new64 -i *.laz -v -odir ground_classified -olaz -cores 8
 ## Module arguments
 
 ### General
--buffered [n]      : define read or write buffer of size [n]{default=262144}  
 -chunk_size [n]    : set chunk size [n] in number of bytes  
 -comma_not_point   : use comma instead of point as decimal separator  
 -neighbors [n]     : set neighbors filename or wildcard [n]  
@@ -768,6 +767,7 @@ lasground_new64 -i *.laz -v -odir ground_classified -olaz -cores 8
 -lof [fnf]      : use input out of a list of files [fnf]  
 -unique         : remove duplicate files in a -lof list  
 -merged         : merge input files  
+-buffered [n]   : use on-the-fly buffering of size [n] for tiles without implicit buffer  
 -stdin          : pipe from stdin  
 
 ### Output
@@ -799,12 +799,10 @@ lasground_new64 -i *.laz -v -odir ground_classified -olaz -cores 8
 -temp_files [n]  : set base file name [n] for temp files (example: E:\tmp)
 
 ### parse
-The '-parse [xyz]' flag specifies how to interpret
-each line of the ASCII file. For example, 'tsxyzssa'
-means that the first number is the gpstime, the next
-number should be skipped, the next three numbers are
-the x, y, and z coordinate, the next two should be
-skipped, and the next number is the scan angle.
+The '-parse [xyz]' flag specifies how to interpret each line of the ASCII file.
+For example, 'tsxyzssa' means that the first number is the gpstime, the next
+number should be skipped, the next three numbers are the x, y, and z coordinate,
+the next two should be skipped, and the next number is the scan angle.
 
 The other supported entries are:  
   x : [x] coordinate  
@@ -826,7 +824,7 @@ The other supported entries are:
   o : [o]verlap flag of LAS 1.4 point types 6, 7, 8  
   l : scanner channe[l] of LAS 1.4 point types 6, 7, 8  
   E : terrasolid [E]hco Encoding  
-  c : [c]lassification  
+  c : [c]lassification. If extended classes are used: Use o,l or I to force 1.4 format.  
   u : [u]ser data  
   p : [p]oint source ID  
   e : [e]dge of flight line flag  
@@ -848,26 +846,26 @@ Supported [sep] values:
   hyphen
   space
 
-## License
+## Licensing
 
-Please license from info@rapidlasso.de to use the tool
-commercially. 
-You may use the tool to do tests with up to 3 mio points.
-Please note that the unlicensed version may will adjust
-some data and add a bit of white noise to the coordinates.
+Info on licensing and pricing: https://rapidlasso.de/pricing/.
+If you have any questions or need assistance, email to info@rapidlasso.de.
+
+## Evaluation and demo mode
+
+Please use the "-demo" argument to run the tool in demo mode. For quality tests,
+use small files (< 1.5 million points). If you use larger files, the output will
+contain diagonal lines/output distortions due to the license protection.
 
 ## Support
 
-To get more information about a tool just goto the
-[LAStools Google Group](http://groups.google.com/group/lastools/)
-and enter the tool name in the search function.
-You will get plenty of samples to this tool.
+1. We invite you to join our LAStools Google Group (http://groups.google.com/group/lastools/).
+   If you are looking for information about a specific tool, enter the tool name in the search 
+   function and you'll find all discussions related to the respective tool. 
+2. Customer Support Page: https://rapidlasso.de/customer-support/.  
+3. Download LAStools: https://rapidlasso.de/downloads/.  
+4. Changelog: https://rapidlasso.de/changelog/.  
 
-To get further support see our
-[rapidlasso service page](https://rapidlasso.de/service/)
 
-Check for latest updates at
-https://rapidlasso.de/category/blog/releases/
-
-If you have any suggestions please let us (info@rapidlasso.de) know.
-
+If you want to send us feedback or have questions that are not answered in the resources above, 
+please email to info@rapidlasso.de.

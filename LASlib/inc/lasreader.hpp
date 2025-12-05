@@ -58,6 +58,7 @@
 #include "laswaveform13reader.hpp"
 
 #include <string>
+#include <filesystem>
 
 class LASindex;
 class COPCindex;
@@ -179,6 +180,16 @@ class LASLIB_DLL LASreader {
   };
   inline F64 get_max_z() const {
     return header.max_z;
+  };
+  // LAS 1.5
+  inline F64 get_max_gps_time() const {
+      return header.max_gps_time;
+  };
+  inline F64 get_min_gps_time() const {
+      return header.min_gps_time;
+  };
+  inline U16 get_time_offset() const {
+      return header.time_offset;
   };
 
   inline F64 get_x() const {
@@ -378,7 +389,7 @@ class LASLIB_DLL LASreadOpener {
   };
   void reset();
   std::string get_temp_file_base() const {
-    return temp_file_base;
+    return temp_path(temp_file_base);
   };
   LASreader* open(const CHAR* other_file_name = 0, BOOL reset_after_other = TRUE);
   BOOL reopen(LASreader* lasreader, BOOL remain_buffered = TRUE);
@@ -503,7 +514,7 @@ class LASLIB_DLL LASreadOpener {
 
   // optional resolution-of-interest query (copc indexed)
   U8 inside_depth_opener;  // 0 all, 1 max depth, 2 resolution
-  U8 copc_stream_order;    // 0 normal, 1 spatially, 2 depth
+  U8 copc_stream_order;    // 0 normal, 1 spatially (default), 2 depth
   F32 copc_resolution;
   I32 copc_depth;
 };

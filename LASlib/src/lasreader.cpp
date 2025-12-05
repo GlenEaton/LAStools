@@ -67,7 +67,7 @@ LASreader::LASreader(LASreadOpener* opener) {
   copc_index = 0;
   copc_stream_order = 0;
   copc_resolution = 0;
-  copc_depth = I32_MAX;
+  copc_depth = -1;
   filter = 0;
   transform = 0;
   ignore = 0;
@@ -368,10 +368,7 @@ BOOL LASreader::read_point_inside_rectangle_indexed() {
 }
 
 BOOL LASreader::read_point_inside_rectangle_copc_indexed() {
-  bool inrect;
   while (copc_index->seek_next((LASreader*)this)) {
-    inrect = point.get_x() >= r_min_x && point.get_x() <= r_max_x && point.get_y() >= r_min_y && point.get_y() <= r_max_y;
-
     if (read_point_default() && point.inside_rectangle(r_min_x, r_min_y, r_max_x, r_max_y)) {
       return TRUE;
     }
@@ -477,6 +474,57 @@ I32 LASreadOpener::unparse(CHAR* string) const {
   if (!temp_file_base.empty()) {
     n += sprintf(string + n, "-temp_files \"%s\" ", temp_file_base.c_str());
   }
+  if (parse_string) {
+    n += sprintf(string + n, "-iparse \"%s\" ", parse_string);
+  }
+  if (skip_lines) {
+    n += sprintf(string + n, "-iskip %d ", skip_lines);
+  }
+  if (itxt){
+    if (ipts) {
+      n += sprintf(string + n, "-ipts ");
+    } else if (iptx) {
+      n += sprintf(string + n, "-iptx ");
+    } else if (iptx_transform) {
+      n += sprintf(string + n, "-iptx_transform ");
+    } else {
+      n += sprintf(string + n, "-itxt ");
+    }
+  }
+  if (copc_resolution) {
+    n += sprintf(string + n, "-resolution %lf ", copc_resolution);
+  }
+  if (unique) {
+    n += sprintf(string + n, "-unique ");
+  }
+  if (comma_not_point) {
+    n += sprintf(string + n, "-comma_not_point ");
+  }
+  switch (copc_stream_order) { // non default args
+    case 0:
+      n += sprintf(string + n, "-stream_order_normal ");
+      break;
+      /* default
+    case 1:
+      n += sprintf(string + n, "-stream_order_spatial ");
+      break;
+     */
+    case 2:
+      n += sprintf(string + n, "-stream_order_level ");
+      break;
+  }
+  if (copc_depth != -1) {
+    n += sprintf(string + n, "-max_depth %d ", copc_depth);
+  }
+  if (z_from_attribute && !z_from_attribute_try) {
+    n += sprintf(string + n, "-z_from_attribute ");
+  }
+  /* optional in derivation
+  _txt: if (translation) { ... "-itranslate_intensity"
+         if (scale_intensity) "-iscale_intensity"
+   translate_scan_angle ... "-itranslate_scan_angle"
+   scale_scan_angle "-iscale_scan_angle"
+  */
   return n;
 }
 
@@ -485,9 +533,7 @@ BOOL LASreadOpener::is_buffered() const {
 }
 
 BOOL LASreadOpener::is_header_populated() const {
-  return (
-      populate_header ||
-      (file_name && (strstr(file_name, ".las") || strstr(file_name, ".laz") || strstr(file_name, ".LAS") || strstr(file_name, ".LAZ"))));
+  return (populate_header || (file_name && IsLasLazFile(std::string(file_name))));
 }
 
 void LASreadOpener::reset() {
@@ -700,7 +746,7 @@ LASreader* LASreadOpener::open(const CHAR* other_file_name, BOOL reset_after_oth
       if (files_are_flightlines) {
         transform->setPointSource(file_name_current + files_are_flightlines + files_are_flightlines_index);
       }
-      if (strstr(file_name, ".las") || strstr(file_name, ".laz") || strstr(file_name, ".LAS") || strstr(file_name, ".LAZ")) {
+      if (IsLasLazFile(file_name)) {
         LASreaderLAS* lasreaderlas = nullptr;
         if (scale_factor == 0 && offset == 0) {
           if (auto_reoffset || (offset_adjust && !transform))
@@ -804,7 +850,7 @@ LASreader* LASreadOpener::open(const CHAR* other_file_name, BOOL reset_after_oth
         } else {
           return lasreader;
         }
-      } else if (strstr(file_name, ".bin") || strstr(file_name, ".BIN")) {
+      } else if (HasFileExt(std::string(file_name), ".bin")) {
         LASreaderBIN* lasreaderbin;
         if (offset_adjust) {
           if (offset != 0 && !transform)
@@ -860,7 +906,7 @@ LASreader* LASreadOpener::open(const CHAR* other_file_name, BOOL reset_after_oth
         } else {
           return lasreader;
         }
-      } else if (strstr(file_name, ".shp") || strstr(file_name, ".SHP")) {
+      } else if (HasFileExt(std::string(file_name), ".shp")) {
         LASreaderSHP* lasreadershp;
         if (offset_adjust) {
           if (offset != 0 && !transform)
@@ -911,7 +957,7 @@ LASreader* LASreadOpener::open(const CHAR* other_file_name, BOOL reset_after_oth
         } else {
           return lasreader;
         }
-      } else if (strstr(file_name, ".asc") || strstr(file_name, ".ASC")) {
+      } else if (HasFileExt(std::string(file_name), ".asc")) {
         LASreaderASC* lasreaderasc;
         if (offset_adjust) {
           if (offset != 0 && !transform)
@@ -962,7 +1008,7 @@ LASreader* LASreadOpener::open(const CHAR* other_file_name, BOOL reset_after_oth
         } else {
           return lasreader;
         }
-      } else if (strstr(file_name, ".bil") || strstr(file_name, ".BIL")) {
+      } else if (HasFileExt(std::string(file_name), ".bil")) {
         LASreaderBIL* lasreaderbil;
         if (offset_adjust) {
           if (offset != 0 && !transform)
@@ -1013,7 +1059,7 @@ LASreader* LASreadOpener::open(const CHAR* other_file_name, BOOL reset_after_oth
         } else {
           return lasreader;
         }
-      } else if (strstr(file_name, ".dtm") || strstr(file_name, ".DTM")) {
+      } else if (HasFileExt(std::string(file_name), ".dtm")) {
         LASreaderDTM* lasreaderdtm;
         if (offset_adjust) {
           if (offset != 0 && !transform)
@@ -1064,7 +1110,7 @@ LASreader* LASreadOpener::open(const CHAR* other_file_name, BOOL reset_after_oth
         } else {
           return lasreader;
         }
-      } else if (strstr(file_name, ".ply") || strstr(file_name, ".PLY")) {
+      } else if (HasFileExt(std::string(file_name), ".ply")) {
         LASreaderPLY* lasreaderply = new LASreaderPLY(this);
         if (translate_intensity != 0.0f) lasreaderply->set_translate_intensity(translate_intensity);
         if (scale_intensity != 1.0f) lasreaderply->set_scale_intensity(scale_intensity);
@@ -1106,7 +1152,7 @@ LASreader* LASreadOpener::open(const CHAR* other_file_name, BOOL reset_after_oth
         } else {
           return lasreader;
         }
-      } else if (strstr(file_name, ".qi") || strstr(file_name, ".QI")) {
+      } else if (HasFileExt(std::string(file_name), ".qi")) {
         LASreaderQFIT* lasreaderqfit;
         if (offset_adjust) {
           if (offset != 0 && !transform)
@@ -1402,7 +1448,7 @@ BOOL LASreadOpener::reopen(LASreader* lasreader, BOOL remain_buffered) {
       return TRUE;
     } else {
       if (!file_name) return FALSE;
-      if (strstr(file_name, ".las") || strstr(file_name, ".laz") || strstr(file_name, ".LAS") || strstr(file_name, ".LAZ")) {
+      if (IsLasLazFile(std::string(file_name))) {
         LASreaderLAS* lasreaderlas = (LASreaderLAS*)lasreader;
         if (!lasreaderlas->open(file_name, io_ibuffer_size, FALSE, decompress_selective)) {
           laserror("cannot reopen lasreaderlas with file name '%s'", file_name);
@@ -1419,7 +1465,7 @@ BOOL LASreadOpener::reopen(LASreader* lasreader, BOOL remain_buffered) {
         }
         if (inside_depth_opener) lasreaderlas->inside_copc_depth(inside_depth_opener, copc_depth, copc_resolution);
         return TRUE;
-      } else if (strstr(file_name, ".bin") || strstr(file_name, ".BIN")) {
+      } else if (HasFileExt(std::string(file_name), ".bin")) {
         LASreaderBIN* lasreaderbin = (LASreaderBIN*)lasreader;
         if (!lasreaderbin->open(file_name)) {
           laserror("cannot reopen lasreaderbin with file name '%s'", file_name);
@@ -1435,7 +1481,7 @@ BOOL LASreadOpener::reopen(LASreader* lasreader, BOOL remain_buffered) {
             lasreaderbin->inside_circle(inside_circle[0], inside_circle[1], inside_circle[2]);
         }
         return TRUE;
-      } else if (strstr(file_name, ".shp") || strstr(file_name, ".SHP")) {
+      } else if (HasFileExt(std::string(file_name), ".shp")) {
         LASreaderSHP* lasreadershp = (LASreaderSHP*)lasreader;
         if (!lasreadershp->reopen(file_name)) {
           laserror("cannot reopen lasreadershp with file name '%s'", file_name);
@@ -1451,7 +1497,7 @@ BOOL LASreadOpener::reopen(LASreader* lasreader, BOOL remain_buffered) {
             lasreadershp->inside_circle(inside_circle[0], inside_circle[1], inside_circle[2]);
         }
         return TRUE;
-      } else if (strstr(file_name, ".qi") || strstr(file_name, ".QI")) {
+      } else if (HasFileExt(std::string(file_name), ".qi")) {
         LASreaderQFIT* lasreaderqfit = (LASreaderQFIT*)lasreader;
         if (!lasreaderqfit->reopen(file_name)) {
           laserror("cannot reopen lasreaderqfit with file name '%s'", file_name);
@@ -1467,7 +1513,7 @@ BOOL LASreadOpener::reopen(LASreader* lasreader, BOOL remain_buffered) {
             lasreaderqfit->inside_circle(inside_circle[0], inside_circle[1], inside_circle[2]);
         }
         return TRUE;
-      } else if (strstr(file_name, ".asc") || strstr(file_name, ".ASC")) {
+      } else if (HasFileExt(std::string(file_name), ".asc")) {
         LASreaderASC* lasreaderasc = (LASreaderASC*)lasreader;
         if (!lasreaderasc->reopen(file_name)) {
           laserror("cannot reopen lasreaderasc with file name '%s'", file_name);
@@ -1483,7 +1529,7 @@ BOOL LASreadOpener::reopen(LASreader* lasreader, BOOL remain_buffered) {
             lasreaderasc->inside_circle(inside_circle[0], inside_circle[1], inside_circle[2]);
         }
         return TRUE;
-      } else if (strstr(file_name, ".bil") || strstr(file_name, ".BIL")) {
+      } else if (HasFileExt(std::string(file_name), ".bil")) {
         LASreaderBIL* lasreaderbil = (LASreaderBIL*)lasreader;
         if (!lasreaderbil->reopen(file_name)) {
           laserror("cannot reopen lasreaderbil with file name '%s'", file_name);
@@ -1499,7 +1545,7 @@ BOOL LASreadOpener::reopen(LASreader* lasreader, BOOL remain_buffered) {
             lasreaderbil->inside_circle(inside_circle[0], inside_circle[1], inside_circle[2]);
         }
         return TRUE;
-      } else if (strstr(file_name, ".dtm") || strstr(file_name, ".DTM")) {
+      } else if (HasFileExt(std::string(file_name), ".dtm")) {
         LASreaderDTM* lasreaderdtm = (LASreaderDTM*)lasreader;
         if (!lasreaderdtm->reopen(file_name)) {
           laserror("cannot reopen lasreaderdtm with file name '%s'", file_name);
@@ -2023,17 +2069,14 @@ void LASreadOpener::parse(int argc, char* argv[], BOOL parse_ignore, BOOL suppre
       } else if (strcmp(argv[i], "-stored") == 0) {
         set_stored(TRUE);
         *argv[i] = '\0';
-      } else if (strcmp(argv[i], "-stream_order_spatial") == 0)  // COPC only
-      {
-        set_copc_stream_ordered_spatially();
+      } else if (strcmp(argv[i], "-stream_order_spatial") == 0) { // COPC only
+        set_copc_stream_ordered_spatially(); // 1 (default)
         *argv[i] = '\0';
-      } else if (strcmp(argv[i], "-stream_order_normal") == 0)  // COPC only
-      {
-        set_copc_stream_ordered_by_chunk();
+      } else if (strcmp(argv[i], "-stream_order_normal") == 0) { // COPC only
+        set_copc_stream_ordered_by_chunk(); // 0
         *argv[i] = '\0';
-      } else if (strcmp(argv[i], "-stream_order_level") == 0)  // COPC only
-      {
-        set_copc_stream_ordered_by_level();
+      } else if (strcmp(argv[i], "-stream_order_level") == 0) { // COPC only
+        set_copc_stream_ordered_by_level(); // 2
         *argv[i] = '\0';
       }
     } else if (strcmp(argv[i], "-lof") == 0) {
@@ -2099,6 +2142,7 @@ void LASreadOpener::parse(int argc, char* argv[], BOOL parse_ignore, BOOL suppre
       if ((i + 1) >= argc) {
         laserror("'%s' needs 1 argument: base name", argv[i]);
       }
+      // we expect trailed path separator, if not, the filename will be extended
       temp_file_base = std::string(argv[i + 1]);
       *argv[i] = '\0';
       *argv[i + 1] = '\0';
@@ -2238,7 +2282,7 @@ std::string LASreadOpener::get_file_name_opt_only(bool name_only) {
     return std::string(get_file_name_only());
   else {
     // get FULL filename
-    std::filesystem::path ffn = get_file_name();  
+    std::filesystem::path ffn = get_file_name();
     return std::filesystem::absolute(ffn).string();
   }
 }
@@ -2317,21 +2361,19 @@ const CHAR* LASreadOpener::get_file_extension_only(U32 number) const {
 }
 
 I32 LASreadOpener::get_file_format(U32 number) const {
-  if (strstr(file_names[number], ".las") || strstr(file_names[number], ".LAS")) {
+  if (IsLasLazFile(std::string(file_names[number]))) {
     return LAS_TOOLS_FORMAT_LAS;
-  } else if (strstr(file_names[number], ".laz") || strstr(file_names[number], ".LAZ")) {
-    return LAS_TOOLS_FORMAT_LAZ;
-  } else if (strstr(file_names[number], ".bin") || strstr(file_names[number], ".BIN")) {
+  } else if (HasFileExt(std::string(file_names[number]), ".bin")) {
     return LAS_TOOLS_FORMAT_BIN;
-  } else if (strstr(file_names[number], ".shp") || strstr(file_names[number], ".SHP")) {
+  } else if (HasFileExt(std::string(file_names[number]), ".shp")) {
     return LAS_TOOLS_FORMAT_SHP;
-  } else if (strstr(file_names[number], ".qi") || strstr(file_names[number], ".QI")) {
+  } else if (HasFileExt(std::string(file_names[number]), ".qi")) {
     return LAS_TOOLS_FORMAT_QFIT;
-  } else if (strstr(file_names[number], ".asc") || strstr(file_names[number], ".ASC")) {
+  } else if (HasFileExt(std::string(file_names[number]), ".asc")) {
     return LAS_TOOLS_FORMAT_ASC;
-  } else if (strstr(file_names[number], ".bil") || strstr(file_names[number], ".BIL")) {
+  } else if (HasFileExt(std::string(file_names[number]), ".bil")) {
     return LAS_TOOLS_FORMAT_BIL;
-  } else if (strstr(file_names[number], ".dtm") || strstr(file_names[number], ".DTM")) {
+  } else if (HasFileExt(std::string(file_names[number]), ".dtm")) {
     return LAS_TOOLS_FORMAT_DTM;
   } else {
     return LAS_TOOLS_FORMAT_TXT;
@@ -2482,7 +2524,7 @@ BOOL LASreadOpener::add_file_name(const CHAR* file_name, BOOL unique)
       file_names = (CHAR**)realloc_las(file_names, sizeof(CHAR*) * file_name_allocated);
     } else {
       file_name_allocated = 16;
-      file_names = (CHAR**)malloc(sizeof(CHAR*) * file_name_allocated);
+      file_names = (CHAR**)malloc_las(sizeof(CHAR*) * file_name_allocated);
     }
     if (file_names == 0) {
       laserror("alloc for file_names pointer array failed at %d", file_name_allocated);
@@ -2509,8 +2551,8 @@ BOOL LASreadOpener::add_file_name(const CHAR* file_name, U32 ID, BOOL unique) {
       file_names_ID = (U32*)realloc_las(file_names_ID, sizeof(U32) * file_name_allocated);
     } else {
       file_name_allocated = 16;
-      file_names = (CHAR**)malloc(sizeof(CHAR*) * file_name_allocated);
-      file_names_ID = (U32*)malloc(sizeof(U32) * file_name_allocated);
+      file_names = (CHAR**)malloc_las(sizeof(CHAR*) * file_name_allocated);
+      file_names_ID = (U32*)malloc_las(sizeof(U32) * file_name_allocated);
     }
     if (file_names == 0) {
       laserror("alloc for file_names pointer array failed at %d", file_name_allocated);
@@ -2548,13 +2590,13 @@ BOOL LASreadOpener::add_file_name(const CHAR* file_name, U32 ID, I64 npoints, F6
       file_names_max_y = (F64*)realloc_las(file_names_max_y, sizeof(F64) * file_name_allocated);
     } else {
       file_name_allocated = 16;
-      file_names = (CHAR**)malloc(sizeof(CHAR*) * file_name_allocated);
-      file_names_ID = (U32*)malloc(sizeof(U32) * file_name_allocated);
-      file_names_npoints = (I64*)malloc(sizeof(I64) * file_name_allocated);
-      file_names_min_x = (F64*)malloc(sizeof(F64) * file_name_allocated);
-      file_names_min_y = (F64*)malloc(sizeof(F64) * file_name_allocated);
-      file_names_max_x = (F64*)malloc(sizeof(F64) * file_name_allocated);
-      file_names_max_y = (F64*)malloc(sizeof(F64) * file_name_allocated);
+      file_names = (CHAR**)malloc_las(sizeof(CHAR*) * file_name_allocated);
+      file_names_ID = (U32*)malloc_las(sizeof(U32) * file_name_allocated);
+      file_names_npoints = (I64*)malloc_las(sizeof(I64) * file_name_allocated);
+      file_names_min_x = (F64*)malloc_las(sizeof(F64) * file_name_allocated);
+      file_names_min_y = (F64*)malloc_las(sizeof(F64) * file_name_allocated);
+      file_names_max_x = (F64*)malloc_las(sizeof(F64) * file_name_allocated);
+      file_names_max_y = (F64*)malloc_las(sizeof(F64) * file_name_allocated);
       if (kdtree_rectangles == 0) {
         kdtree_rectangles = new LASkdtreeRectangles();
         if (kdtree_rectangles == 0) {
@@ -2689,12 +2731,12 @@ BOOL LASreadOpener::add_neighbor_file_name(const CHAR* neighbor_file_name, I64 n
       neighbor_file_names_max_y = (F64*)realloc_las(neighbor_file_names_max_y, sizeof(F64) * neighbor_file_name_allocated);
     } else {
       neighbor_file_name_allocated = 16;
-      neighbor_file_names = (CHAR**)malloc(sizeof(CHAR*) * neighbor_file_name_allocated);
-      neighbor_file_names_npoints = (I64*)malloc(sizeof(I64) * neighbor_file_name_allocated);
-      neighbor_file_names_min_x = (F64*)malloc(sizeof(F64) * neighbor_file_name_allocated);
-      neighbor_file_names_min_y = (F64*)malloc(sizeof(F64) * neighbor_file_name_allocated);
-      neighbor_file_names_max_x = (F64*)malloc(sizeof(F64) * neighbor_file_name_allocated);
-      neighbor_file_names_max_y = (F64*)malloc(sizeof(F64) * neighbor_file_name_allocated);
+      neighbor_file_names = (CHAR**)malloc_las(sizeof(CHAR*) * neighbor_file_name_allocated);
+      neighbor_file_names_npoints = (I64*)malloc_las(sizeof(I64) * neighbor_file_name_allocated);
+      neighbor_file_names_min_x = (F64*)malloc_las(sizeof(F64) * neighbor_file_name_allocated);
+      neighbor_file_names_min_y = (F64*)malloc_las(sizeof(F64) * neighbor_file_name_allocated);
+      neighbor_file_names_max_x = (F64*)malloc_las(sizeof(F64) * neighbor_file_name_allocated);
+      neighbor_file_names_max_y = (F64*)malloc_las(sizeof(F64) * neighbor_file_name_allocated);
       if (neighbor_kdtree_rectangles == 0) {
         neighbor_kdtree_rectangles = new LASkdtreeRectangles();
         if (neighbor_kdtree_rectangles == 0) {
@@ -2869,7 +2911,7 @@ BOOL LASreadOpener::add_neighbor_file_name(const CHAR* neighbor_file_name, BOOL 
       neighbor_file_names = (CHAR**)realloc_las(neighbor_file_names, sizeof(CHAR*) * neighbor_file_name_allocated);
     } else {
       neighbor_file_name_allocated = 16;
-      neighbor_file_names = (CHAR**)malloc(sizeof(CHAR*) * neighbor_file_name_allocated);
+      neighbor_file_names = (CHAR**)malloc_las(sizeof(CHAR*) * neighbor_file_name_allocated);
     }
     if (neighbor_file_names == 0) {
       laserror("alloc for neighbor_file_names pointer array failed at %d", neighbor_file_name_allocated);
@@ -3096,11 +3138,7 @@ LASreadOpener::LASreadOpener() {
   filter = 0;
   transform = 0;
   ignore = 0;
-#if defined(_WIN32)
   temp_file_base = "";
-#else
-  temp_file_base = ".";
-#endif
   // COPC
   inside_depth_opener = 0;
   copc_stream_order = 1;

@@ -45,6 +45,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <cstdint>
 
 BOOL LASreaderLAS::open(const char* file_name, I32 io_buffer_size, BOOL peek_only, U32 decompress_selective)
 {
@@ -77,7 +78,7 @@ BOOL LASreaderLAS::open(const char* file_name, I32 io_buffer_size, BOOL peek_onl
 
   // create input
   ByteStreamIn* in;
-  if (IS_LITTLE_ENDIAN())
+  if (Endian::IS_LITTLE_ENDIAN)
     in = new ByteStreamInFileLE(file);
   else
     in = new ByteStreamInFileBE(file);
@@ -106,7 +107,7 @@ BOOL LASreaderLAS::open(FILE* file, BOOL peek_only, U32 decompress_selective)
 
   // create input
   ByteStreamIn* in;
-  if (IS_LITTLE_ENDIAN())
+  if (Endian::IS_LITTLE_ENDIAN)
     in = new ByteStreamInFileLE(file);
   else
     in = new ByteStreamInFileBE(file);
@@ -118,7 +119,7 @@ BOOL LASreaderLAS::open(std::istream& stream, BOOL peek_only, U32 decompress_sel
 {
   // create input
   ByteStreamIn* in;
-  if (IS_LITTLE_ENDIAN())
+  if (Endian::IS_LITTLE_ENDIAN)
     in = new ByteStreamInIstreamLE(stream, seekable);
   else
     in = new ByteStreamInIstreamBE(stream, seekable);
@@ -373,6 +374,39 @@ BOOL LASreaderLAS::open(ByteStreamIn* stream, BOOL peek_only, U32 decompress_sel
       header.user_data_in_header_size = header.header_size - 375;
     }
   }
+
+  // special handling for LAS 1.5
+  if ((header.version_major == 1) && (header.version_minor >= 5))
+  {
+      if (header.header_size < 393)
+      {
+          laserror("for LAS 1.%d header_size should at least be 393 but it is only %d", header.version_minor, header.header_size);
+          return FALSE;
+      }
+      else
+      {
+          try { stream->get64bitsLE((U8*)&(header.max_gps_time)); }
+          catch (...)
+          {
+              laserror("reading header.max_gps_time");
+              return FALSE;
+          }
+          try { stream->get64bitsLE((U8*)&(header.min_gps_time)); }
+          catch (...)
+          {
+              laserror("reading header.min_gps_time");
+              return FALSE;
+          }
+          try { stream->get16bitsLE((U8*)&(header.time_offset)); }
+          catch (...)
+          {
+              laserror("reading header.time_offset");
+              return FALSE;
+          }
+          header.user_data_in_header_size = header.header_size - 393;
+      }
+  }
+
 
   // load any number of user-defined bytes that might have been added to the header
   if (header.user_data_in_header_size)
@@ -631,6 +665,8 @@ BOOL LASreaderLAS::open(ByteStreamIn* stream, BOOL peek_only, U32 decompress_sel
 
           // read the payload of this VLR which contains 176 bytes
 
+          // TODO LAS 1.5: maybe adjust for gps fields?
+
           if (header.vlrs[i].record_length_after_header == 176)
           {
             try { stream->get64bitsLE((U8*)&(header.vlr_lasoriginal->number_of_point_records)); } catch(...)
@@ -686,12 +722,12 @@ BOOL LASreaderLAS::open(ByteStreamIn* stream, BOOL peek_only, U32 decompress_sel
         else
         {
           header.vlrs[i].data = new U8[header.vlrs[i].record_length_after_header+1]; // +final \0 to ensure char termination
-          try { stream->getBytes(header.vlrs[i].data, header.vlrs[i].record_length_after_header); } catch(...)
-          {
+          try {
+            stream->getBytes(header.vlrs[i].data, header.vlrs[i].record_length_after_header);
+            header.vlrs[i].data[header.vlrs[i].record_length_after_header] = 0;  // ensure char termination
+          } catch(...) {
             laserror("reading %d bytes of data into header.vlrs[%d].data", header.vlrs[i].record_length_after_header, i);
-            return FALSE;
           }
-          header.vlrs[i].data[header.vlrs[i].record_length_after_header] = 0; // ensure char termination
         }
       }
       else
@@ -874,7 +910,7 @@ BOOL LASreaderLAS::open(ByteStreamIn* stream, BOOL peek_only, U32 decompress_sel
               LASMessage(LAS_WARNING, "COPC VLR info should be the first vlr (not specification-conform)");
             }
 
-            if (header.version_major == 1 && header.version_minor == 4 && (header.point_data_format & 0x3F) >= 6 && (header.point_data_format & 0x3F) <= 8)
+            if (header.version_major == 1 && header.version_minor >= 4 && (header.point_data_format & 0x3F) >= 6 && (header.point_data_format & 0x3F) <= 8)
             {
               if (!header.vlr_copc_info)
               {
@@ -891,7 +927,7 @@ BOOL LASreaderLAS::open(ByteStreamIn* stream, BOOL peek_only, U32 decompress_sel
             }
             else
             {
-              LASMessage(LAS_WARNING, "COPC VLR info should belong in LAZ file 1.4 pdrf 6-8 not LAZ %u.%u pdrf %u (not specification-conform).", header.version_major, header.version_minor, header.point_data_format);
+              LASMessage(LAS_WARNING, "COPC VLR info should belong in LAZ file 1.4 or 1.5 pdrf 6-8 not LAZ %u.%u pdrf %u (not specification-conform).", header.version_major, header.version_minor, header.point_data_format);
             }
           }
         }
@@ -909,11 +945,11 @@ BOOL LASreaderLAS::open(ByteStreamIn* stream, BOOL peek_only, U32 decompress_sel
   if (header.user_data_after_header_size)
   {
     header.user_data_after_header = new U8[header.user_data_after_header_size];
-
-    try { stream->getBytes((U8*)header.user_data_after_header, header.user_data_after_header_size); } catch(...)
+    try
     {
+      stream->getBytes((U8*)header.user_data_after_header, header.user_data_after_header_size);
+    } catch(...) {
       laserror("reading %d bytes of data into header.user_data_after_header", header.user_data_after_header_size);
-      return FALSE;
     }
   }
 
@@ -931,16 +967,11 @@ BOOL LASreaderLAS::open(ByteStreamIn* stream, BOOL peek_only, U32 decompress_sel
         I64 here = stream->tell();
         stream->seek(header.start_of_first_extended_variable_length_record);
 
-		header.evlrs = (LASevlr*)calloc(header.number_of_extended_variable_length_records, sizeof(LASevlr));
-
+        header.evlrs = (LASevlr*)calloc(header.number_of_extended_variable_length_records, sizeof(LASevlr));
         // read the extended variable length records into the header
-
-        I64 evlrs_size = 0;
-
         for (i = 0; i < header.number_of_extended_variable_length_records; i++)
         {
           // read variable length records variable after variable (to avoid alignment issues)
-
           try { stream->get16bitsLE((U8*)&(header.evlrs[i].reserved)); } catch(...)
           {
             laserror("reading header.evlrs[%d].reserved", i);
@@ -968,20 +999,14 @@ BOOL LASreaderLAS::open(ByteStreamIn* stream, BOOL peek_only, U32 decompress_sel
           }
 
           // keep track on the number of bytes we have read so far
-
-          evlrs_size += 60;
-
           // check variable length record contents
-
 /*
           if (header.evlrs[i].reserved != 0)
           {
             LASMessage(LAS_WARNING, "wrong header.evlrs[%d].reserved: %d != 0", i, header.evlrs[i].reserved);
           }
 */
-
           // load data following the header of the variable length record
-
           if (header.evlrs[i].record_length_after_header)
           {
             if (strcmp(header.evlrs[i].user_id, "laszip encoded") == 0)
@@ -1138,26 +1163,27 @@ BOOL LASreaderLAS::open(ByteStreamIn* stream, BOOL peek_only, U32 decompress_sel
             }
             else
             {
-              header.evlrs[i].data = new U8[(U32)header.evlrs[i].record_length_after_header+1];
-              try { stream->getBytes(header.evlrs[i].data, (U32)header.evlrs[i].record_length_after_header); } catch(...)
+              try
               {
-                laserror("reading %d bytes of data into header.evlrs[%d].data", (I32)header.evlrs[i].record_length_after_header, i);
-                return FALSE;
+                if (header.evlrs[i].record_length_after_header > UINT32_MAX) {
+                  laserror("evlr size of %llu bytes in header.evlrs[%d] not supported", header.evlrs[i].record_length_after_header, i);
+                }
+                header.evlrs[i].data = new U8[header.evlrs[i].record_length_after_header + 1];
+                if (header.evlrs[i].record_length_after_header) {
+                  stream->getBytes(header.evlrs[i].data, header.evlrs[i].record_length_after_header);
+                  header.evlrs[i].data[header.evlrs[i].record_length_after_header] = 0;  // ensure char termination
+                }
+              } catch(...) {
+                laserror("reading %llu bytes of data into header.evlrs[%d].data", header.evlrs[i].record_length_after_header, i);
               }
-              header.evlrs[i].data[header.evlrs[i].record_length_after_header] = 0; // ensure char termination
             }
           }
           else
           {
             header.evlrs[i].data = 0;
           }
-
           // keep track on the number of bytes we have read so far
-
-          evlrs_size += header.evlrs[i].record_length_after_header;
-
           // special handling for known variable header tags
-
           if (strcmp(header.evlrs[i].user_id, "LASF_Projection") == 0)
           {
             if (header.evlrs[i].record_id == 34735) // GeoKeyDirectoryTag
@@ -1260,7 +1286,6 @@ BOOL LASreaderLAS::open(ByteStreamIn* stream, BOOL peek_only, U32 decompress_sel
           else if (strcmp(header.evlrs[i].user_id, "laszip encoded") == 0 || strcmp(header.evlrs[i].user_id, "LAStools") == 0)
           {
             // we take our own EVLRs away from everywhere
-            evlrs_size -= (60+header.evlrs[i].record_length_after_header);
             i--;
             header.number_of_extended_variable_length_records--;
           }
@@ -1844,16 +1869,16 @@ BOOL LASreaderLASreoffset::open(ByteStreamIn* stream, BOOL peek_only, U32 decomp
   return TRUE;
 }
 
-LASreaderLASrescalereoffset::LASreaderLASrescalereoffset(LASreadOpener* opener, F64 x_scale_factor, F64 y_scale_factor, F64 z_scale_factor, F64 x_offset, F64 y_offset, F64 z_offset) : 
+LASreaderLASrescalereoffset::LASreaderLASrescalereoffset(LASreadOpener* opener, F64 x_scale_factor, F64 y_scale_factor, F64 z_scale_factor, F64 x_offset, F64 y_offset, F64 z_offset) :
   LASreaderLAS(opener),
   LASreaderLASrescale(opener, x_scale_factor, y_scale_factor, z_scale_factor, FALSE),
   LASreaderLASreoffset(opener, x_offset, y_offset, z_offset)
 {
 }
 
-LASreaderLASrescalereoffset::LASreaderLASrescalereoffset(LASreadOpener* opener, F64 x_scale_factor, F64 y_scale_factor, F64 z_scale_factor) : 
+LASreaderLASrescalereoffset::LASreaderLASrescalereoffset(LASreadOpener* opener, F64 x_scale_factor, F64 y_scale_factor, F64 z_scale_factor) :
   LASreaderLAS(opener),
-  LASreaderLASrescale(opener, x_scale_factor, y_scale_factor, z_scale_factor, FALSE), 
+  LASreaderLASrescale(opener, x_scale_factor, y_scale_factor, z_scale_factor, FALSE),
   LASreaderLASreoffset(opener)
 {
 }

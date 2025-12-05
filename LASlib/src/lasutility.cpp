@@ -44,6 +44,7 @@ LASinventory::LASinventory()
   max_X = min_X = 0;
   max_Y = min_Y = 0;
   max_Z = min_Z = 0;
+  max_gps_time = min_gps_time = 0;
   first = TRUE;
 }
 
@@ -62,6 +63,8 @@ BOOL LASinventory::init(const LASheader* header)
     min_Y = (I32)header->get_Y(header->min_y);
     max_Z = (I32)header->get_Z(header->max_z);
     min_Z = (I32)header->get_Z(header->min_z);
+    max_gps_time = header->max_gps_time;
+    min_gps_time = header->min_gps_time;
     first = FALSE;
     return TRUE;
   }
@@ -84,16 +87,23 @@ BOOL LASinventory::add(const LASpoint* point)
     min_X = max_X = point->get_X();
     min_Y = max_Y = point->get_Y();
     min_Z = max_Z = point->get_Z();
+    if (point->have_gps_time) {
+        min_gps_time = max_gps_time = point->get_gps_time();
+    }
     first = FALSE;
   }
   else
   {
-    if (point->get_X() < min_X) min_X = point->get_X();
-    else if (point->get_X() > max_X) max_X = point->get_X();
-    if (point->get_Y() < min_Y) min_Y = point->get_Y();
-    else if (point->get_Y() > max_Y) max_Y = point->get_Y();
-    if (point->get_Z() < min_Z) min_Z = point->get_Z();
-    else if (point->get_Z() > max_Z) max_Z = point->get_Z();
+      if (point->get_X() < min_X) { min_X = point->get_X(); }
+      else if (point->get_X() > max_X) { max_X = point->get_X(); }
+      if (point->get_Y() < min_Y) { min_Y = point->get_Y(); }
+      else if (point->get_Y() > max_Y) { max_Y = point->get_Y(); }
+      if (point->get_Z() < min_Z) { min_Z = point->get_Z(); }
+      else if (point->get_Z() > max_Z) { max_Z = point->get_Z(); }
+      if (point->have_gps_time) {
+          if (point->get_gps_time() < min_gps_time) { min_gps_time = point->get_gps_time(); }
+          else if (point->get_gps_time() > max_gps_time) { max_gps_time = point->get_gps_time(); }
+      }
   }
   return TRUE;
 }
@@ -142,6 +152,8 @@ BOOL LASinventory::update_header(LASheader* header) const
     header->min_y = header->get_y(min_Y);
     header->max_z = header->get_z(max_Z);
     header->min_z = header->get_z(min_Z);
+    header->max_gps_time = max_gps_time;
+    header->min_gps_time = min_gps_time;
     header->extended_number_of_point_records = extended_number_of_point_records;
     for (i = 0; i < 15; i++)
     {
@@ -187,29 +199,39 @@ LASsummary::LASsummary()
 BOOL LASsummary::add(const LASpoint* point)
 {
   number_of_point_records++;
+  U8 classex = point->get_classification();
   if (point->extended_point_type)
   {
     number_of_points_by_return[point->get_extended_return_number()]++;
     number_of_returns[point->get_extended_number_of_returns()]++;
-    if (point->get_extended_classification() > 31)
-    {
-      extended_classification[point->get_extended_classification()]++;
+    if (classex > 31) {
+      extended_classification[classex]++;
+    } else {
+      classification[classex]++;
     }
-    else
-    {
-      classification[point->get_classification()]++;
+    if (point->get_extended_overlap_flag()) {
+      flagged_extended_overlap++;
+      flagged_extended_overlap_classification[classex]++;
     }
-    if (point->get_extended_overlap_flag()) { flagged_extended_overlap++; flagged_extended_overlap_classification[(point->get_classification() ? point->get_classification() : point->get_extended_classification())]++; }
   }
   else
   {
     number_of_points_by_return[point->get_return_number()]++;
-    classification[point->get_classification()]++;
+    classification[classex]++;
     number_of_returns[point->get_number_of_returns()]++;
   }
-  if (point->get_synthetic_flag()) { flagged_synthetic++; flagged_synthetic_classification[(point->get_classification() ? point->get_classification() : point->get_extended_classification())]++; }
-  if (point->get_keypoint_flag()) { flagged_keypoint++;  flagged_keypoint_classification[(point->get_classification() ? point->get_classification() : point->get_extended_classification())]++; }
-  if (point->get_withheld_flag()) { flagged_withheld++;  flagged_withheld_classification[(point->get_classification() ? point->get_classification() : point->get_extended_classification())]++; }
+  if (point->get_synthetic_flag()) {
+    flagged_synthetic++;
+    flagged_synthetic_classification[classex]++;
+  }
+  if (point->get_keypoint_flag()) {
+    flagged_keypoint++;
+    flagged_keypoint_classification[classex]++;
+  }
+  if (point->get_withheld_flag()) {
+    flagged_withheld++;
+    flagged_withheld_classification[classex]++;
+  }
   if (first)
   {
     // does the point have extra bytes
@@ -221,7 +243,9 @@ BOOL LASsummary::add(const LASpoint* point)
       max.extra_bytes_number = point->extra_bytes_number;
     }
     // initialize min and max
+    min.extended_point_type = point->extended_point_type;
     min = *point;
+    max.extended_point_type = point->extended_point_type;
     max = *point;
     // initialize fluff detection
     xyz_low_digits_10[0] = (U16)(point->get_X()%10);
@@ -485,7 +509,7 @@ void LASbin::add_to_bin(I32 bin)
       if (size_pos == 0)
       {
         size_pos = bin + 1024;
-        bins_pos = (U32*)malloc(sizeof(U32)*size_pos);
+        bins_pos = (U32*)malloc_las(sizeof(U32) * size_pos);
         if (bins_pos == 0)
         {
           laserror("allocating %u pos bins", size_pos);
@@ -517,7 +541,7 @@ void LASbin::add_to_bin(I32 bin)
       if (size_neg == 0)
       {
         size_neg = bin + 1024;
-        bins_neg = (U32*)malloc(sizeof(U32)*size_neg);
+        bins_neg = (U32*)malloc_las(sizeof(U32) * size_neg);
         if (bins_neg == 0)
         {
           laserror("allocating %u neg bins", size_neg);
@@ -564,8 +588,8 @@ void LASbin::add(I32 item, I32 value)
       if (size_pos == 0)
       {
         size_pos = 1024;
-        bins_pos = (U32*)malloc(sizeof(U32)*size_pos);
-        values_pos = (F64*)malloc(sizeof(F64)*size_pos);
+        bins_pos = (U32*)malloc_las(sizeof(U32) * size_pos);
+        values_pos = (F64*)malloc_las(sizeof(F64) * size_pos);
         if (bins_pos == 0)
         {
           laserror("allocating %u pos bins", size_pos);
@@ -609,8 +633,8 @@ void LASbin::add(I32 item, I32 value)
       if (size_neg == 0)
       {
         size_neg = 1024;
-        bins_neg = (U32*)malloc(sizeof(U32)*size_neg);
-        values_neg = (F64*)malloc(sizeof(F64)*size_neg);
+        bins_neg = (U32*)malloc_las(sizeof(U32) * size_neg);
+        values_neg = (F64*)malloc_las(sizeof(F64) * size_neg);
         if (bins_neg == 0)
         {
           laserror("allocating %u neg bins", size_neg);
@@ -669,8 +693,8 @@ void LASbin::add(F64 item, F64 value)
       if (size_pos == 0)
       {
         size_pos = 1024;
-        bins_pos = (U32*)malloc(sizeof(U32)*size_pos);
-        values_pos = (F64*)malloc(sizeof(F64)*size_pos);
+        bins_pos = (U32*)malloc_las(sizeof(U32) * size_pos);
+        values_pos = (F64*)malloc_las(sizeof(F64) * size_pos);
         if (bins_pos == 0)
         {
           laserror("allocating %u pos bins", size_pos);
@@ -714,8 +738,8 @@ void LASbin::add(F64 item, F64 value)
       if (size_neg == 0)
       {
         size_neg = 1024;
-        bins_neg = (U32*)malloc(sizeof(U32)*size_neg);
-        values_neg = (F64*)malloc(sizeof(F64)*size_neg);
+        bins_neg = (U32*)malloc_las(sizeof(U32) * size_neg);
+        values_neg = (F64*)malloc_las(sizeof(F64) * size_neg);
         if (bins_neg == 0)
         {
           laserror("allocating %u neg bins", size_neg);
@@ -822,9 +846,9 @@ void LASbin::report(FILE* file, const CHAR* name, const CHAR* name_avg) const
           lidardouble2string(temp1, ((F64)bin)*step, step);
           lidardouble2string(temp2, ((F64)bin+1)*step, step);
           if (values_neg)
-            fprintf(file, "  bin [%s,%s) has average %g (of %d)\012", temp1, temp2, values_neg[i]/bins_neg[i], bins_neg[i]);
+            fprintf(file, "  bin [%s,%s] has average %g (of %d)\012", temp1, temp2, values_neg[i]/bins_neg[i], bins_neg[i]);
           else
-            fprintf(file, "  bin [%s,%s) has %d\012", temp1, temp2, bins_neg[i]);
+            fprintf(file, "  bin [%s,%s] has %d\012", temp1, temp2, bins_neg[i]);
         }
       }
     }
@@ -848,9 +872,9 @@ void LASbin::report(FILE* file, const CHAR* name, const CHAR* name_avg) const
           lidardouble2string(temp1, ((F64)bin)*step, step);
           lidardouble2string(temp2, ((F64)bin+1)*step, step);
           if (values_pos)
-            fprintf(file, "  bin [%s,%s) average has %g (of %d)\012", temp1, temp2, values_pos[i]/bins_pos[i], bins_pos[i]);
+            fprintf(file, "  bin [%s,%s] average has %g (of %d)\012", temp1, temp2, values_pos[i]/bins_pos[i], bins_pos[i]);
           else
-            fprintf(file, "  bin [%s,%s) has %d\012", temp1, temp2, bins_pos[i]);
+            fprintf(file, "  bin [%s,%s] has %d\012", temp1, temp2, bins_pos[i]);
         }
       }
     }
@@ -1475,9 +1499,9 @@ BOOL LASoccupancyGrid::add_internal(I32 pos_x, I32 pos_y)
     }
     else
     {
-      if (array == &minus_plus || array == &plus_plus) *ankers = (I32*)malloc(array_size_new*sizeof(I32));
-      *array = (U32**)malloc(array_size_new*sizeof(U32*));
-      *array_sizes = (U16*)malloc(array_size_new*sizeof(U16));
+      if (array == &minus_plus || array == &plus_plus) *ankers = (I32*)malloc_las(array_size_new * sizeof(I32));
+      *array = (U32**)malloc_las(array_size_new * sizeof(U32*));
+      *array_sizes = (U16*)malloc_las(array_size_new * sizeof(U16));
     }
     for (U32 i = *array_size; i < array_size_new; i++)
     {
@@ -1503,7 +1527,7 @@ BOOL LASoccupancyGrid::add_internal(I32 pos_x, I32 pos_y)
     }
     else
     {
-      (*array)[pos_y] = (U32*)malloc(array_sizes_new*sizeof(U32));
+      (*array)[pos_y] = (U32*)malloc_las(array_sizes_new * sizeof(U32));
     }
     for (U16 i = (*array_sizes)[pos_y]; i < array_sizes_new; i++)
     {

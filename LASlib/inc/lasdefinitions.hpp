@@ -2,12 +2,13 @@
 ===============================================================================
 
   FILE:  lasdefinitions.hpp
-  
+
   CONTENTS:
-  
+
     Contains the Header and Point classes for reading and writing LiDAR points
     in the LAS format
 
+      Version 1.5,   Oct 13, 2025 
       Version 1.4,   Nov 14, 2011.
       Version 1.3,   Oct 24, 2010.
       Version 1.2, April 29, 2008.
@@ -28,29 +29,30 @@
 
     This software is distributed WITHOUT ANY WARRANTY and without even the
     implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  
+
   CHANGE HISTORY:
   
+    13 October 2025 -- support for LAS 1.5
     9 November 2022 -- support of COPC VLR and EVLR
-    19 April 2017 -- support for selective decompression for new LAS 1.4 points 
+    19 April 2017 -- support for selective decompression for new LAS 1.4 points
     1 February 2017 -- better support for OGC WKT strings in VLRs or EVLRs
     22 June 2016 -- set default of VLR header "reserved" to 0 instead of 0xAABB
     1 August 2015 -- moving LASpoint, LASquantizer, and LASattributer to LASzip
     9 December 2013 -- bug fix and improved writing of new LAS 1.4 point types
-    21 December 2011 -- (limited) support for LAS 1.4 and attributed extra bytes 
+    21 December 2011 -- (limited) support for LAS 1.4 and attributed extra bytes
     10 January 2011 -- licensing change for LGPL release and liblas integration
     16 December 2010 -- updated to support generic LASitem point formats
     3 December 2010 -- updated to (somewhat) support LAS format 1.3
-    7 September 2008 -- updated to support LAS format 1.2 
+    7 September 2008 -- updated to support LAS format 1.2
     11 June 2007 -- number of return / scan direction bitfield order was wrong
     18 February 2007 -- created after repairing 2 vacuum cleaners in the garden
-  
+
 ===============================================================================
 */
 #ifndef LAS_DEFINITIONS_HPP
 #define LAS_DEFINITIONS_HPP
 
-#define LAS_TOOLS_VERSION 250517
+#define LAS_TOOLS_VERSION 251128
 
 #include <stdio.h>
 #include <string.h>
@@ -80,11 +82,13 @@
 #define LAS_TOOLS_FORMAT_DTM    12
 #define LAS_TOOLS_FORMAT_JSON   13
 
-#define LAS_TOOLS_GLOBAL_ENCODING_BIT_GPS_TIME_TYPE 0
-#define LAS_TOOLS_GLOBAL_ENCODING_BIT_WDP_INTERNAL  1
-#define LAS_TOOLS_GLOBAL_ENCODING_BIT_WDP_EXTERNAL  2
-#define LAS_TOOLS_GLOBAL_ENCODING_BIT_SYNTHETIC     3
-#define LAS_TOOLS_GLOBAL_ENCODING_BIT_OGC_WKT_CRS   4
+#define LAS_TOOLS_GLOBAL_ENCODING_BIT_GPS_TIME_TYPE    0
+#define LAS_TOOLS_GLOBAL_ENCODING_BIT_WDP_INTERNAL     1
+#define LAS_TOOLS_GLOBAL_ENCODING_BIT_WDP_EXTERNAL     2
+#define LAS_TOOLS_GLOBAL_ENCODING_BIT_SYNTHETIC        3
+#define LAS_TOOLS_GLOBAL_ENCODING_BIT_OGC_WKT_CRS      4
+// bit 5 unused
+#define LAS_TOOLS_GLOBAL_ENCODING_BIT_TIME_OFFSET_FLAG 6
 
 #define LAS_TOOLS_IO_IBUFFER_SIZE   262144
 #define LAS_TOOLS_IO_OBUFFER_SIZE   262144
@@ -96,7 +100,7 @@ class LASLIB_DLL LASvlr
 {
 public:
   U16 reserved;
-  CHAR user_id[LAS_VLR_USER_ID_CHAR_LEN]; 
+  CHAR user_id[LAS_VLR_USER_ID_CHAR_LEN];
   U16 record_id;
   U16 record_length_after_header;
   CHAR description[LAS_HEADER_CHAR_LEN];
@@ -108,7 +112,7 @@ class LASLIB_DLL LASevlr
 {
 public:
   U16 reserved;
-  CHAR user_id[LAS_VLR_USER_ID_CHAR_LEN]; 
+  CHAR user_id[LAS_VLR_USER_ID_CHAR_LEN];
   U16 record_id;
   I64 record_length_after_header;
   CHAR description[LAS_HEADER_CHAR_LEN];
@@ -191,7 +195,7 @@ class LASLIB_DLL LASvlr_copc_entry
 public:
   LAScopc_voxelkey key;
   U64 offset;
-  I32 byte_size;
+  U32 byte_size;
   I32 point_count;
 };
 
@@ -233,6 +237,11 @@ public:
   U32 number_of_extended_variable_length_records;
   U64 extended_number_of_point_records;
   U64 extended_number_of_points_by_return[15];
+
+  // LAS 1.5 only
+  F64 max_gps_time;
+  F64 min_gps_time;
+  U16 time_offset;
 
   U32 user_data_in_header_size;
   U8* user_data_in_header;
@@ -339,6 +348,9 @@ public:
     y_offset = 0.0;
     z_offset = 0.0;
     z_from_attrib = -1;
+    time_offset = 0;
+    min_gps_time = 0;
+    max_gps_time = 0;
   };
 
   void clean_user_data_in_header()
@@ -491,14 +503,18 @@ public:
       laserror("wrong file signature '%4s'", file_signature);
       return FALSE;
     }
-    if ((version_major != 1) || (version_minor > 4))
+    if ((version_major != 1) || (version_minor > 5))
     {
-      LASMessage(LAS_WARNING, "unknown version %d.%d (allowed 1.0-1.4)", version_major, version_minor);
+      LASMessage(LAS_WARNING, "unknown version %d.%d (allowed 1.0-1.5)", version_major, version_minor);
     }
     U8 pdf = point_data_format & 0x7f; // remove LAZ bit 7
-    if ((version_minor < 4) && (pdf >= 6) ||
-        (version_minor < 3) && (pdf >= 4) ||
-        (version_minor < 2) && (pdf >= 2)) {
+    if (((version_minor < 4) && (pdf >= 6)) ||
+        ((version_minor < 3) && (pdf >= 4)) ||
+        ((version_minor < 2) && (pdf >= 2))) {
+        LASMessage(LAS_WARNING, "LAS version %d.%d does not allow point format %d", version_major, version_minor, pdf);
+    }
+    // LAS 1.5 removed support for point format 0-5. 
+    if ((version_minor > 4) && (pdf < 6)) {
         LASMessage(LAS_WARNING, "LAS version %d.%d does not allow point format %d", version_major, version_minor, pdf);
     }
     if (header_size < 227)
@@ -530,6 +546,7 @@ public:
         LASMessage(LAS_WARNING, "invalid bounding box [ %g %g %g / %g %g %g ]", min_x, min_y, min_z, max_x, max_y, max_z);
       }
     }
+    // note: min_gps_time and max_gps_time not part of core fields and are not read at the time of this check
     return TRUE;
   };
 
@@ -560,7 +577,7 @@ public:
   };
 
   // note that data needs to be allocated with new [] and not malloc and that LASheader
-  // will become the owner over this and manage its deallocation 
+  // will become the owner over this and manage its deallocation
   BOOL add_vlr(const CHAR* user_id, const U16 record_id, const U16 record_length_after_header, U8* data, const BOOL keep_description=FALSE, const CHAR* description=0, const BOOL keep_existing=FALSE)
   {
     U32 i = 0;
@@ -599,7 +616,7 @@ public:
     {
       number_of_variable_length_records = 1;
       offset_to_point_data += 54;
-      vlrs = (LASvlr*)malloc(sizeof(LASvlr));
+      vlrs = (LASvlr*)malloc_las(sizeof(LASvlr));
     }
     if (vlrs != nullptr) {
       memset((void*)&(vlrs[i]), 0, sizeof(LASvlr));
@@ -693,7 +710,7 @@ public:
   };
 
   // note that data needs to be allocated with new [] and not malloc and that LASheader
-  // will become the owner over this and manage its deallocation 
+  // will become the owner over this and manage its deallocation
   void add_evlr(const CHAR* user_id, const U16 record_id, const I64 record_length_after_header, U8* data, const BOOL keep_description=FALSE, const CHAR* description=0, const BOOL keep_existing=FALSE)
   {
     U32 i = 0;
@@ -729,7 +746,7 @@ public:
     else
     {
       number_of_extended_variable_length_records = 1;
-      evlrs = (LASevlr*)malloc(sizeof(LASevlr)*number_of_extended_variable_length_records);
+      evlrs = (LASevlr*)malloc_las(sizeof(LASevlr) * number_of_extended_variable_length_records);
     }
     if (evlrs != nullptr) {
       evlrs[i].reserved = 0;  // used to be 0xAABB

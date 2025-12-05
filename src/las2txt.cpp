@@ -1237,7 +1237,7 @@ int main(int argc, char* argv[]) {
               fprintf(file_out, "%d", lasreader->point.get_intensity());
             break;
           case 'a':  // the scan angle
-            fprintf(file_out, "%g", lasreader->point.get_scan_angle());
+            fprintf(file_out, "%s", lasreader->point.get_scan_angle_string().c_str());
             break;
           case 'r':  // the number of the return
             if (header->point_data_format > 5) {
@@ -1247,15 +1247,7 @@ int main(int argc, char* argv[]) {
             }
             break;
           case 'c':  // the classification
-            if (header->point_data_format > 5) {
-              if (lasreader->point.get_extended_classification()) {
-                fprintf(file_out, "%d", lasreader->point.get_extended_classification());
-              } else {
-                fprintf(file_out, "%d", lasreader->point.get_classification());
-              }
-            } else {
-              fprintf(file_out, "%d", lasreader->point.get_classification());
-            }
+            fprintf(file_out, "%d", lasreader->point.get_classification());
             break;
           case 'u':  // the user data
             fprintf(file_out, "%d", lasreader->point.get_user_data());

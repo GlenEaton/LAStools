@@ -72,8 +72,8 @@ within 0.5 units in source exists. Set all other z-values to 0.
 -match_edge_of_flightline: uses edge of flightline flag for point matching  
 -match_scan_direction    : uses scan direction flag for point matching  
 -match_user_data         : uses user data for point matching  
--match_xy [dist]         : Match points by x-y coordinates and the specified maximum distance  
--match_xyz [dist]        : Match points by x-y-z coordinates and the specified maximum distance  
+-match_xy [d]            : Match points by x-y coordinates and the specified maximum distance [d] 
+-match_xyz [dx] <[y] [z]> : Match points by x-y-z coordinates and a spherical distance [dx] or a bounding box [dx] [y] [z]. 
 
 ### copy operations
 -copy_attribute [n]   : copy attribute with index [n]. Attribute must exist in source and target with matching data type  
@@ -125,7 +125,6 @@ within 0.5 units in source exists. Set all other z-values to 0.
 ## Module arguments
 
 ### General
--buffered [n]      : define read or write buffer of size [n]{default=262144}  
 -chunk_size [n]    : set chunk size [n] in number of bytes  
 -comma_not_point   : use comma instead of point as decimal separator  
 -neighbors [n]     : set neighbors filename or wildcard [n]  
@@ -700,6 +699,7 @@ within 0.5 units in source exists. Set all other z-values to 0.
 -lof [fnf]      : use input out of a list of files [fnf]  
 -unique         : remove duplicate files in a -lof list  
 -merged         : merge input files  
+-buffered [n]   : use on-the-fly buffering of size [n] for tiles without implicit buffer  
 -stdin          : pipe from stdin  
 
 ### Output
@@ -731,12 +731,10 @@ within 0.5 units in source exists. Set all other z-values to 0.
 -temp_files [n]  : set base file name [n] for temp files (example: E:\tmp)
 
 ### parse
-The '-parse [xyz]' flag specifies how to interpret
-each line of the ASCII file. For example, 'tsxyzssa'
-means that the first number is the gpstime, the next
-number should be skipped, the next three numbers are
-the x, y, and z coordinate, the next two should be
-skipped, and the next number is the scan angle.
+The '-parse [xyz]' flag specifies how to interpret each line of the ASCII file.
+For example, 'tsxyzssa' means that the first number is the gpstime, the next
+number should be skipped, the next three numbers are the x, y, and z coordinate,
+the next two should be skipped, and the next number is the scan angle.
 
 The other supported entries are:  
   x : [x] coordinate  
@@ -758,7 +756,7 @@ The other supported entries are:
   o : [o]verlap flag of LAS 1.4 point types 6, 7, 8  
   l : scanner channe[l] of LAS 1.4 point types 6, 7, 8  
   E : terrasolid [E]hco Encoding  
-  c : [c]lassification  
+  c : [c]lassification. If extended classes are used: Use o,l or I to force 1.4 format.  
   u : [u]ser data  
   p : [p]oint source ID  
   e : [e]dge of flight line flag  
@@ -780,26 +778,26 @@ Supported [sep] values:
   hyphen
   space
 
-## License
+## Licensing
 
-Please license from info@rapidlasso.de to use the tool
-commercially. 
-You may use the tool to do tests with up to 3 mio points.
-Please note that the unlicensed version may will adjust
-some data and add a bit of white noise to the coordinates.
+Info on licensing and pricing: https://rapidlasso.de/pricing/.
+If you have any questions or need assistance, email to info@rapidlasso.de.
+
+## Evaluation and demo mode
+
+Please use the "-demo" argument to run the tool in demo mode. For quality tests,
+use small files (< 1.5 million points). If you use larger files, the output will
+contain diagonal lines/output distortions due to the license protection.
 
 ## Support
 
-To get more information about a tool just goto the
-[LAStools Google Group](http://groups.google.com/group/lastools/)
-and enter the tool name in the search function.
-You will get plenty of samples to this tool.
+1. We invite you to join our LAStools Google Group (http://groups.google.com/group/lastools/).
+   If you are looking for information about a specific tool, enter the tool name in the search 
+   function and you'll find all discussions related to the respective tool. 
+2. Customer Support Page: https://rapidlasso.de/customer-support/.  
+3. Download LAStools: https://rapidlasso.de/downloads/.  
+4. Changelog: https://rapidlasso.de/changelog/.  
 
-To get further support see our
-[rapidlasso service page](https://rapidlasso.de/service/)
 
-Check for latest updates at
-https://rapidlasso.de/category/blog/releases/
-
-If you have any suggestions please let us (info@rapidlasso.de) know.
-
+If you want to send us feedback or have questions that are not answered in the resources above, 
+please email to info@rapidlasso.de.

@@ -16,6 +16,18 @@ can be adjusted up or down.
 Will classify all points within a range of 4 and step of 0.5 with class 20.   
 
     lasdistance64 -i ..\data\lake.laz ^
+                -poly ..\data\lake_breakline.gpkg ^
+                - gdal ^
+                -o lake.laz
+
+Will classify all points within a range of 4 and step of 0.5 with class 20.  from the line specifie "lake_breakline.gpkg". 
+With the -gdal argument, input formats such as GPKG, GML, GeoJSON, KML, GPX, and SHP are supported.
+Please note that GPKG, SHP, and GML are recommended for maximum precision, as KML, GPX, and GeoJSON require transformation to 
+geographic coordinates (EPSG:4326) during processing, which may introduce very minor positional differences along 
+polygon boundaries. Only single-layer poly input files are supported. For multi-layer inputs, only the first layer is processed. 
+For GPX files, only routes or tracks layers are supported.
+
+    lasdistance64 -i ..\data\lake.laz ^
                 -poly ..\data\lake_breakline.shp ^
                 -distance_xy 10.0 -step_xy 1.0 ^
                 -o lake.laz
@@ -49,6 +61,7 @@ lasdistance64 -i in.laz -poly breaklines.shp -distance_xy 5.0 -step_xy 1.0 -o ou
 -flag_as_keypoint             : flag points as keypoint (instead of classifying them)  
 -flag_as_synthetic            : flag points as synthetic (instead of classifying them)  
 -flag_as_withheld             : flag points as withheld (instead of classifying them)  
+-gdal                         : Uses the GDAL library to support additional vector formats such as GML, GPKG, GeoJSON and GPX as -poly input file. Can also be used for SHP and KML
 -ignore_class [m] [n] [o] ... : ignores points with classification codes [m] [n] [o] ...  
 -ilay [n]                     : apply [n] or all LASlayers found in corresponding *.lay file on read  
 -ilaydir [n]                  : look for corresponding *.lay file in directory [n]  
@@ -56,7 +69,7 @@ lasdistance64 -i in.laz -poly breaklines.shp -distance_xy 5.0 -step_xy 1.0 -o ou
 -olay                         : write or append classification changes to a LASlayers *.lay file  
 -olaydir [dir]                : write the output *.lay file in directory [dir]  
 -poly [fns]                   : use file [fns] as source for polygonal segments  
--remain_buffered              : write all data to the output, even if they are part of a boundary buffer  
+-remain_buffered              : write on-the-fly buffer to the output
 -remove_points                : remove points from output file (instead of classifying them)  
 -step [n]                     : use granularity [n] to compute the approximated distances (default=0.5)  
 -step_xy [n]                  : granularity [n] with which the approximated distances are computed (default=0.5)  
@@ -84,7 +97,6 @@ lasdistance64 -i in.laz -poly breaklines.shp -distance_xy 5.0 -step_xy 1.0 -o ou
 ## Module arguments
 
 ### General
--buffered [n]      : define read or write buffer of size [n]{default=262144}  
 -chunk_size [n]    : set chunk size [n] in number of bytes  
 -comma_not_point   : use comma instead of point as decimal separator  
 -neighbors [n]     : set neighbors filename or wildcard [n]  
@@ -658,6 +670,7 @@ lasdistance64 -i in.laz -poly breaklines.shp -distance_xy 5.0 -step_xy 1.0 -o ou
 -lof [fnf]      : use input out of a list of files [fnf]  
 -unique         : remove duplicate files in a -lof list  
 -merged         : merge input files  
+-buffered [n]   : use on-the-fly buffering of size [n] for tiles without implicit buffer  
 -stdin          : pipe from stdin  
 
 ### Output
@@ -689,12 +702,10 @@ lasdistance64 -i in.laz -poly breaklines.shp -distance_xy 5.0 -step_xy 1.0 -o ou
 -temp_files [n]  : set base file name [n] for temp files (example: E:\tmp)
 
 ### parse
-The '-parse [xyz]' flag specifies how to interpret
-each line of the ASCII file. For example, 'tsxyzssa'
-means that the first number is the gpstime, the next
-number should be skipped, the next three numbers are
-the x, y, and z coordinate, the next two should be
-skipped, and the next number is the scan angle.
+The '-parse [xyz]' flag specifies how to interpret each line of the ASCII file.
+For example, 'tsxyzssa' means that the first number is the gpstime, the next
+number should be skipped, the next three numbers are the x, y, and z coordinate,
+the next two should be skipped, and the next number is the scan angle.
 
 The other supported entries are:  
   x : [x] coordinate  
@@ -716,7 +727,7 @@ The other supported entries are:
   o : [o]verlap flag of LAS 1.4 point types 6, 7, 8  
   l : scanner channe[l] of LAS 1.4 point types 6, 7, 8  
   E : terrasolid [E]hco Encoding  
-  c : [c]lassification  
+  c : [c]lassification. If extended classes are used: Use o,l or I to force 1.4 format.  
   u : [u]ser data  
   p : [p]oint source ID  
   e : [e]dge of flight line flag  
@@ -738,26 +749,26 @@ Supported [sep] values:
   hyphen
   space
 
-## License
+## Licensing
 
-Please license from info@rapidlasso.de to use the tool
-commercially. 
-You may use the tool to do tests with up to 3 mio points.
-Please note that the unlicensed version may will adjust
-some data and add a bit of white noise to the coordinates.
+Info on licensing and pricing: https://rapidlasso.de/pricing/.
+If you have any questions or need assistance, email to info@rapidlasso.de.
+
+## Evaluation and demo mode
+
+Please use the "-demo" argument to run the tool in demo mode. For quality tests,
+use small files (< 1.5 million points). If you use larger files, the output will
+contain diagonal lines/output distortions due to the license protection.
 
 ## Support
 
-To get more information about a tool just goto the
-[LAStools Google Group](http://groups.google.com/group/lastools/)
-and enter the tool name in the search function.
-You will get plenty of samples to this tool.
+1. We invite you to join our LAStools Google Group (http://groups.google.com/group/lastools/).
+   If you are looking for information about a specific tool, enter the tool name in the search 
+   function and you'll find all discussions related to the respective tool. 
+2. Customer Support Page: https://rapidlasso.de/customer-support/.  
+3. Download LAStools: https://rapidlasso.de/downloads/.  
+4. Changelog: https://rapidlasso.de/changelog/.  
 
-To get further support see our
-[rapidlasso service page](https://rapidlasso.de/service/)
 
-Check for latest updates at
-https://rapidlasso.de/category/blog/releases/
-
-If you have any suggestions please let us (info@rapidlasso.de) know.
-
+If you want to send us feedback or have questions that are not answered in the resources above, 
+please email to info@rapidlasso.de.

@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unordered_map>
 
 #include "lasquadtree.hpp"
 #include "lasinterval.hpp"
@@ -44,8 +45,7 @@
 #include "bytestreamin_file.hpp"
 #include "bytestreamout_file.hpp"
 #include "lasmessage.hpp"
-
-#include <unordered_map>
+#include "mydefs.hpp"
 
 typedef std::unordered_map<I32, U32> my_cell_hash;
 
@@ -83,7 +83,7 @@ BOOL LASindex::add(const F64 x, const F64 y, const U32 p_index)
 
 void LASindex::complete(U32 minimum_points, I32 maximum_intervals)
 {
-  LASMessage(LAS_VERBOSE, "before complete %d %d", minimum_points, maximum_intervals);
+  LASMessage(LAS_VERBOSE, "before complete %u %d", minimum_points, maximum_intervals);
   if (get_message_log_level() <= LAS_VERBOSE)
     print();
   if (minimum_points)
@@ -190,15 +190,15 @@ void LASindex::print()
     }
     if (total_check != interval->total)
     {
-      LASMessage(LAS_VERBOSE, "total_check %d != interval->total %d", total_check, interval->total);
+      LASMessage(LAS_VERBOSE, "total_check %u != interval->total %u", total_check, interval->total);
     }
-    LASMessage(LAS_VERY_VERBOSE, "cell %d intervals %d full %d total %d (%.2f)", interval->index, intervals, interval->full, interval->total, 100.0f*interval->full/interval->total);
+    LASMessage(LAS_VERY_VERBOSE, "cell %d intervals %u full %u total %u (%.2f)", interval->index, intervals, interval->full, interval->total, 100.0f*interval->full/interval->total);
     total_cells++;
     total_full += interval->full;
     total_total += interval->total;
     total_intervals += intervals;
   }
-  LASMessage(LAS_VERY_VERBOSE, "total cells/intervals %d/%d full %d (%.2f)", total_cells, total_intervals, total_full, 100.0f*total_full/total_total);
+  LASMessage(LAS_VERY_VERBOSE, "total cells/intervals %u/%u full %u (%.2f)", total_cells, total_intervals, total_full, 100.0f*total_full/total_total);
 }
 
 LASquadtree* LASindex::get_spatial() const
@@ -265,7 +265,7 @@ BOOL LASindex::read(FILE* file)
 {
   if (file == 0) return FALSE;
   ByteStreamIn* stream;
-  if (IS_LITTLE_ENDIAN())
+  if (Endian::IS_LITTLE_ENDIAN)
     stream = new ByteStreamInFileLE(file);
   else
     stream = new ByteStreamInFileBE(file);
@@ -282,7 +282,7 @@ BOOL LASindex::write(FILE* file) const
 {
   if (file == 0) return FALSE;
   ByteStreamOut* stream;
-  if (IS_LITTLE_ENDIAN())
+  if (Endian::IS_LITTLE_ENDIAN)
     stream = new ByteStreamOutFileLE(file);
   else
     stream = new ByteStreamOutFileBE(file);
@@ -297,39 +297,25 @@ BOOL LASindex::write(FILE* file) const
 
 BOOL LASindex::read(const char* file_name)
 {
-  if (file_name == 0) return FALSE;
-  char* name = LASCopyString(file_name);
-  if (strstr(file_name, ".las") || strstr(file_name, ".laz"))
-  {
-    name[strlen(name)-1] = 'x';
+  FILE* file;
+  std::string fn = std::string(file_name);
+  if (fn.empty()) return FALSE;
+  if (fn.length() <= 4) {
+    laserror("lasindex: file name invalid: '%s'", fn.c_str());
   }
-  else if (strstr(file_name, ".LAS") || strstr(file_name, ".LAZ"))
-  {
-    name[strlen(name)-1] = 'X';
-  }
-  else
-  {
-    name[strlen(name)-3] = 'l';
-    name[strlen(name)-2] = 'a';
-    name[strlen(name)-1] = 'x';
-  }
-  FILE* file = LASfopen(name, "rb");
-
-  if (file == 0)
-  {
-    free(name);
+  fn = FileExtSet(fn, ".lax");
+  file = LASfopen(fn.c_str(), "rb");
+  if (file == 0) {
     return FALSE;
   }
-  if (!read(file))
-  {
-    laserror("(LASindex): cannot read '%s'", name);
+  else if (!read(file)) {
+    laserror("(LASindex): cannot read '%s'", fn.c_str());
     fclose(file);
-    free(name);
     return FALSE;
+  } else {
+    fclose(file);
+    return TRUE;
   }
-  fclose(file);
-  free(name);
-  return TRUE;
 }
 
 BOOL LASindex::append(const char* file_name) const
@@ -354,7 +340,7 @@ BOOL LASindex::append(const char* file_name) const
   FILE* file = LASfopen(file_name, "rb");
 
   ByteStreamIn* bytestreamin = 0;
-  if (IS_LITTLE_ENDIAN())
+  if (Endian::IS_LITTLE_ENDIAN)
     bytestreamin = new ByteStreamInFileLE(file);
   else
     bytestreamin = new ByteStreamInFileBE(file);
@@ -418,7 +404,7 @@ BOOL LASindex::append(const char* file_name) const
   ByteStreamOut* bytestreamout;
   file = LASfopen(file_name, "rb+");
 
-  if (IS_LITTLE_ENDIAN())
+  if (Endian::IS_LITTLE_ENDIAN)
     bytestreamout = new ByteStreamOutFileLE(file);
   else
     bytestreamout = new ByteStreamOutFileBE(file);
@@ -475,40 +461,25 @@ BOOL LASindex::append(const char* file_name) const
 
 BOOL LASindex::write(const char* file_name) const
 {
-  if (file_name == 0) return FALSE;
-  char* name = LASCopyString(file_name);
-  if (strstr(file_name, ".las") || strstr(file_name, ".laz"))
-  {
-    name[strlen(name)-1] = 'x';
+  FILE* file;
+  std::string fn = std::string(file_name);
+  if (fn.empty()) return FALSE;
+  if (fn.length() <= 4) {
+    laserror("lasindex: file name invalid: '%s'", fn.c_str());
   }
-  else if (strstr(file_name, ".LAS") || strstr(file_name, ".LAZ"))
-  {
-    name[strlen(name)-1] = 'X';
-  }
-  else
-  {
-    name[strlen(name)-3] = 'l';
-    name[strlen(name)-2] = 'a';
-    name[strlen(name)-1] = 'x';
-  }
-  FILE* file = LASfopen(name, "wb");
-
-  if (file == 0)
-  {
-    laserror("(LASindex): cannot open file '%s' for write", name);
-    free(name);
+  fn = FileExtSet(fn, ".lax");
+  file = LASfopen(fn.c_str(), "wb");
+  if (file == 0) {
+    laserror("(LASindex): cannot open file '%s' for write", fn.c_str());
     return FALSE;
-  }
-  if (!write(file))
-  {
-    laserror("(LASindex): cannot write file '%s'", name);
+  } else if (!write(file)) {
+    laserror("(LASindex): cannot write '%s'", fn.c_str());
     fclose(file);
-    free(name);
     return FALSE;
+  } else {
+    fclose(file);
+    return TRUE;
   }
-  fclose(file);
-  free(name);
-  return TRUE;
 }
 
 BOOL LASindex::read(ByteStreamIn* stream)

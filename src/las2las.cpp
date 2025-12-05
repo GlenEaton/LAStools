@@ -66,7 +66,6 @@
 #include <time.h>
 #include <stdlib.h>
 #include <string.h>
-#include <cstdint> 
 
 #include "mydefs.hpp"
 #include "lastool.hpp"
@@ -116,7 +115,7 @@ static bool save_vlrs_to_file(const LASheader* header)
       return false;
   }
   ByteStreamOut* out;
-  if (IS_LITTLE_ENDIAN())
+  if (Endian::IS_LITTLE_ENDIAN)
     out = new ByteStreamOutFileLE(file);
   else
     out = new ByteStreamOutFileBE(file);
@@ -179,7 +178,7 @@ static bool load_vlrs_from_file(LASheader* header)
       return false;
   }
   ByteStreamIn* in;
-  if (IS_LITTLE_ENDIAN())
+  if (Endian::IS_LITTLE_ENDIAN)
     in = new ByteStreamInFileLE(file);
   else
     in = new ByteStreamInFileBE(file);
@@ -271,7 +270,7 @@ static bool has_vlr_extension(const CHAR* filename) {
 
 // Validating and determining the VLR index and the parameters
 static U32 determine_vlr_index(const LASheader* header, const int& vlr_index, const CHAR* vlr_user_id, const int& vlr_record_id) {
-  U32 index = -1;
+  U32 index = UINT32_MAX;
 
   if (vlr_user_id == nullptr && vlr_record_id == -1) {
     //Using index for '-save_vlr'
@@ -279,7 +278,7 @@ static U32 determine_vlr_index(const LASheader* header, const int& vlr_index, co
       if (vlr_index < 0 || static_cast<unsigned int>(vlr_index) >= header->number_of_variable_length_records) {  //HIER NOCHMAL KONTROLLIEREN ' >= '
         laserror("Invalid index: The specified index '%d' for '-save_vlr' is out of range", vlr_index);
       }
-      index = vlr_index;
+      index = (U32)vlr_index;
     }
     //Default to index = 0 if no parameters are specified when using '-save_vlr'
     else {
@@ -296,7 +295,7 @@ static U32 determine_vlr_index(const LASheader* header, const int& vlr_index, co
         break;
       }
     }
-    if (index == -1) {
+    if (index == UINT32_MAX) {
       laserror("The specified user ID '%s' or record ID '%d' could not be found when using '-save_vlr'", vlr_user_id, vlr_record_id);
     }
   } 
@@ -309,7 +308,7 @@ static U32 determine_vlr_index(const LASheader* header, const int& vlr_index, co
 /// Saves a single VLR from a LAS header to a specified or default file, ensuring data integrity and file format validation.
 static bool save_single_vlr_to_file(const LASheader* header, const int& vlr_index, const CHAR* vlr_user_id, const int& vlr_record_id, const CHAR* vlr_output_filename)
 {
-  U32 i = -1;
+  U32 i = UINT32_MAX;
   FILE* file  = nullptr;
   // Save VLR to specified or default filename
   if (vlr_output_filename == nullptr) {
@@ -335,7 +334,7 @@ static bool save_single_vlr_to_file(const LASheader* header, const int& vlr_inde
   i = determine_vlr_index(header, vlr_index, vlr_user_id, vlr_record_id);
 
   ByteStreamOut* out;
-  if (IS_LITTLE_ENDIAN())
+  if (Endian::IS_LITTLE_ENDIAN)
     out = new ByteStreamOutFileLE(file);
   else
     out = new ByteStreamOutFileBE(file);
@@ -411,7 +410,7 @@ static bool load_single_vlr_from_file(LASheader* header, const int& vlr_index, c
     laserror("VLR file '%s' could not be found", vlr_input_filename);
   }
   ByteStreamIn* in;
-  if (IS_LITTLE_ENDIAN())
+  if (Endian::IS_LITTLE_ENDIAN)
     in = new ByteStreamInFileLE(file);
   else
     in = new ByteStreamInFileBE(file);
@@ -485,7 +484,7 @@ static bool load_single_vlr_from_file(LASheader* header, const int& vlr_index, c
       vlr.data = 0;
     }
 
-    if (vlr_index >= 0 && i == vlr_index) {
+    if (vlr_index >= 0 && i == (U32)vlr_index) {
       header->add_vlr(vlr.user_id, vlr.record_id, vlr.record_length_after_header, vlr.data, TRUE, vlr.description);
       LASMessage(LAS_VERBOSE, "load VLR with vlr_index '%d' from '%s' file", vlr_index, vlr_input_filename);
       break;
@@ -529,65 +528,6 @@ static void parse_save_load_vlr_args(int& i, int argc, char* argv[], bool& save_
   else if (i + 1 < argc && argv[i + 1][0] != '-') {
     vlr_index = 0; // Default value if just filename arguments is provided
     vlr_filename = argv[++i];
-  }
-}
-
-/// IMPORTANT: The Proj lib must be installed and loaded to use this functionality.
-/// Attempts to create the WKT representation of the CRS via the PROJ lib. 
-/// If it is a Proj transformation, the wkt has already been created.
-/// If GeoTIFFs in the header, first create a projection to get the epsg code.
-void get_wkt_from_proj(CHAR*& ogc_wkt_out, GeoProjectionConverter& geoprojectionconverter, LASreader* lasreader)
-{
-  if (lasreader) {
-    //If there is a target wkt header, it is a CRS transformation
-    const char* wkt_representation = geoprojectionconverter.projParameters.get_target_header_wkt_representation();
-
-    //If the WKT representation has not been created yet
-    if (geoprojectionconverter.source_header_epsg == 0 && wkt_representation == nullptr) {
-      if (!geoprojectionconverter.has_projection(true)) {  // if no source projection was provided in the command line ...
-        //1. try to get the WKT from file header
-        if (lasreader->header.vlr_geo_ogc_wkt) {
-          geoprojectionconverter.set_proj_crs_with_file_header_wkt(lasreader->header.vlr_geo_ogc_wkt, false);
-        } else if (lasreader->header.vlr_geo_keys) {  
-          // 2. If no source CRS was specified and no WKT is in the header, then create WKT from GeoTiff
-          geoprojectionconverter.disable_messages = true;
-
-          geoprojectionconverter.set_projection_from_geo_keys(
-              lasreader->header.vlr_geo_keys[0].number_of_keys, (GeoProjectionGeoKeys*)lasreader->header.vlr_geo_key_entries,
-              lasreader->header.vlr_geo_ascii_params, lasreader->header.vlr_geo_double_params);
-
-          CHAR* ogc_wkt = nullptr;
-          I32 len = 0;
-          if (geoprojectionconverter.get_ogc_wkt_from_projection(len, &ogc_wkt)) {
-            geoprojectionconverter.set_proj_crs_with_file_header_wkt(ogc_wkt, true);
-          // 3. if no WKT can be generated from GeoTiff try to get die EPSG from GeoTiff
-          } else if (geoprojectionconverter.source_header_epsg) {
-            LASMessage(LAS_WARNING, "No valid WKT could be generated from the GeoTiff of the source file. The EPSG code from the GeoTiff is used for generating the WKT, "
-                "this can lead to loss of GeoTiff arguments, which can lead to inaccuracies or data loss in the WKT.");
-            geoprojectionconverter.set_proj_crs_with_epsg(geoprojectionconverter.source_header_epsg, true);
-          } else {
-            laserror("No WKT could be generated from the header information of the source file. Please specify the coordinate system (CRS) directly when calling the operation.");
-          }
-          geoprojectionconverter.reset_projection();
-        }
-      }
-      wkt_representation = geoprojectionconverter.projParameters.get_target_header_wkt_representation();
-    }   
-    if (wkt_representation == nullptr) {
-      // If no WKT representation is available, try to create it with EPSG
-      if (geoprojectionconverter.source_header_epsg > 0) {
-        geoprojectionconverter.set_proj_crs_with_epsg(geoprojectionconverter.source_header_epsg, false);
-        wkt_representation = geoprojectionconverter.projParameters.get_target_header_wkt_representation();
-      }
-    }
-    if (wkt_representation) {
-      size_t buff_len = strlen(wkt_representation) + 1;
-      ogc_wkt_out = (char*)calloc(buff_len, sizeof(char));
-
-      if (ogc_wkt_out) {
-        strcpy_las(ogc_wkt_out, buff_len, wkt_representation);
-      }
-    }
   }
 }
 
@@ -751,9 +691,11 @@ int main(int argc, char* argv[])
         if (strcmp(argv[i], "-set_point_type") == 0 || strcmp(argv[i], "-set_point_data_format") == 0)
         {
           lastool.parse_arg_cnt_check(i, 1, "type");
-          if (sscanf_las(argv[i + 1], "%u", &set_point_data_format) != 1)
-          {
+          if (sscanf_las(argv[i + 1], "%u", &set_point_data_format) != 1) {
             lastool.error_parse_arg_n_invalid(i, 1);
+          } else {
+            // preset point type 
+            lasreadopener.set_point_type(set_point_data_format);
           }
           i++;
         }
@@ -1188,6 +1130,12 @@ int main(int argc, char* argv[])
     laserror("no input specified");
   }
 
+  // check proj options
+
+  if (geoprojectionconverter.is_proj_request == true) {
+    geoprojectionconverter.load_proj();
+  }
+
   BOOL extra_pass = laswriteopener.is_piped();
 
   // we only really need an extra pass if the coordinates are altered or if points are filtered
@@ -1381,7 +1329,7 @@ int main(int argc, char* argv[])
 
       if (set_version_minor >= 0)
       {
-        if (set_version_minor > 4)
+        if (set_version_minor > 5)
         {
           laserror("unknown version_minor %d", set_version_minor);
         }
@@ -1392,10 +1340,15 @@ int main(int argc, char* argv[])
             lasreader->header.header_size -= 8;
             lasreader->header.offset_to_point_data -= 8;
           }
-          else if (lasreader->header.version_minor >= 4)
+          else if (lasreader->header.version_minor == 4)
           {
             lasreader->header.header_size -= (8 + 140);
             lasreader->header.offset_to_point_data -= (8 + 140);
+          }
+          else if (lasreader->header.version_minor >= 5)
+          {
+              lasreader->header.header_size -= (8 + 140 + 18);
+              lasreader->header.offset_to_point_data -= (8 + 140 + 18);
           }
         }
         else if (set_version_minor == 3)
@@ -1406,10 +1359,15 @@ int main(int argc, char* argv[])
             lasreader->header.offset_to_point_data += 8;
             lasreader->header.start_of_waveform_data_packet_record = 0;
           }
-          else if (lasreader->header.version_minor >= 4)
+          else if (lasreader->header.version_minor == 4)
           {
             lasreader->header.header_size -= 140;
             lasreader->header.offset_to_point_data -= 140;
+          }
+          else if (lasreader->header.version_minor >= 5)
+          {
+              lasreader->header.header_size -= (140 + 18);
+              lasreader->header.offset_to_point_data -= (140 + 18);
           }
         }
         else if (set_version_minor == 4)
@@ -1425,6 +1383,11 @@ int main(int argc, char* argv[])
             lasreader->header.header_size += 140;
             lasreader->header.offset_to_point_data += 140;
           }
+          else if (lasreader->header.version_minor >= 5)
+          {
+              lasreader->header.header_size -= 18;
+              lasreader->header.offset_to_point_data -= 18;
+          }
 
           if (lasreader->header.version_minor < 4)
           {
@@ -1439,6 +1402,39 @@ int main(int argc, char* argv[])
               }
             }
           }
+        }
+        else if (set_version_minor == 5)
+        {
+            if (lasreader->header.version_minor < 3)
+            {
+                lasreader->header.header_size += (8 + 140 + 18);
+                lasreader->header.offset_to_point_data += (8 + 140 + 18);
+                lasreader->header.start_of_waveform_data_packet_record = 0;
+            }
+            else if (lasreader->header.version_minor == 3)
+            {
+                lasreader->header.header_size += (140 + 18);
+                lasreader->header.offset_to_point_data += (140 + 18);
+            }
+            else if (lasreader->header.version_minor == 4)
+            {
+                lasreader->header.header_size += 18;
+                lasreader->header.offset_to_point_data += 18;
+            }
+
+            if (lasreader->header.version_minor < 4)
+            {
+                if (set_point_data_format > 5)
+                {
+                    lasreader->header.extended_number_of_point_records = lasreader->header.number_of_point_records;
+                    lasreader->header.number_of_point_records = 0;
+                    for (i = 0; i < 5; i++)
+                    {
+                        lasreader->header.extended_number_of_points_by_return[i] = lasreader->header.number_of_points_by_return[i];
+                        lasreader->header.number_of_points_by_return[i] = 0;
+                    }
+                }
+            }
         }
 
         if ((set_version_minor <= 3) && (lasreader->header.version_minor >= 4))
@@ -1745,9 +1741,7 @@ int main(int argc, char* argv[])
       }
 
       // reproject or just set the projection?
-
       LASquantizer* reproject_quantizer = 0;
-      LASquantizer* saved_quantizer = 0;
       bool set_projection_in_header = false;
       bool set_wkt_global_encoding_bit = false;
 
@@ -1822,7 +1816,7 @@ int main(int argc, char* argv[])
       if (geoprojectionconverter.is_proj_request && !set_ogc_wkt) 
       {
         LASMessage(LAS_VERY_VERBOSE, "the PROJ transformation is prepared within las2las");
-        //1. If the source CRS is not specified as an argument (cmd line), try to generate it from the input file
+        // 1. If the source CRS is not specified as an argument (cmd line), try to generate it from the input file
         if (geoprojectionconverter.check_header_for_crs) 
         {      
           LASMessage(LAS_VERY_VERBOSE, "the header of the input file is checked for its CRS");
@@ -1939,7 +1933,7 @@ int main(int argc, char* argv[])
           // For older file versions that only contain GeoKeys in file header, the WKT should still be generated via LAStool.
           if (ogc_wkt == 0 && geoprojectionconverter.is_proj_request) { 
             LASMessage(LAS_VERBOSE, "the WKT for the file header is created via the PROJ library");
-            get_wkt_from_proj(ogc_wkt, geoprojectionconverter, lasreader);
+            geoprojectionconverter.get_wkt_from_proj(ogc_wkt, geoprojectionconverter, lasreader);
           }
 
           I32 len = (ogc_wkt ? (I32)strlen(ogc_wkt) : 0);
@@ -1987,7 +1981,7 @@ int main(int argc, char* argv[])
         // For older file versions that only contain GeoKeys in file header, the WKT should still be generated via LAStool.
         if (ogc_wkt == 0 && geoprojectionconverter.is_proj_request) {
           LASMessage(LAS_VERBOSE, "the WKT for the file header is created via the PROJ library");
-          get_wkt_from_proj(ogc_wkt, geoprojectionconverter, lasreader);
+          geoprojectionconverter.get_wkt_from_proj(ogc_wkt, geoprojectionconverter, lasreader);
         }
 
         I32 len = (ogc_wkt ? (I32)strlen(ogc_wkt) : 0);
@@ -2163,6 +2157,9 @@ int main(int argc, char* argv[])
           extra_pass = true;
         }
 
+        LASheader* header_writer = new LASheader();
+        *header_writer = lasreader->header;
+
         // for piped output we need an extra pass
         if (extra_pass)
         {
@@ -2212,27 +2209,18 @@ int main(int argc, char* argv[])
             }
           }
 
-          if (reproject_quantizer) lasreader->header = *reproject_quantizer;
-        
-          lasinventory.update_header(&lasreader->header);
-        
+          lasinventory.update_header(header_writer);
+       
           LASMessage(LAS_VERBOSE, "extra pass took %g sec.", taketime() - start_time);
           start_time = taketime();
           LASMessage(LAS_VERBOSE, "piped output: reading %lld and writing %lld points ...", lasreader->npoints, lasinventory.extended_number_of_point_records);
         }
         else
         {
-          if (reproject_quantizer)
-          {
-            saved_quantizer = new LASquantizer();
-            *saved_quantizer = lasreader->header;
-            lasreader->header = *reproject_quantizer;
-          }
           LASMessage(LAS_VERBOSE, "reading %lld and writing all surviving points ...", lasreader->npoints);
         }
 
         // check output
-
         if (!laswriteopener.active())
         {
           // create name from input name
@@ -2241,7 +2229,6 @@ int main(int argc, char* argv[])
         else
         {
           // make sure we do not corrupt the input file
-
           if (lasreadopener.get_file_name() && laswriteopener.get_file_name() && (strcmp(lasreadopener.get_file_name(), laswriteopener.get_file_name()) == 0))
           {
             laserror("input and output file name are identical: '%s'", lasreadopener.get_file_name());
@@ -2249,7 +2236,6 @@ int main(int argc, char* argv[])
         }
 
         // prepare the header for the surviving points
-
         strncpy_las(lasreader->header.system_identifier, LAS_HEADER_CHAR_LEN, LAS_TOOLS_COPYRIGHT);
         char temp[64];
         snprintf(temp, sizeof(temp), "las2las%s (version %d)", (IS64 ? "64" : ""), LAS_TOOLS_VERSION);
@@ -2257,16 +2243,16 @@ int main(int argc, char* argv[])
         strncpy_las(lasreader->header.generating_software, LAS_HEADER_CHAR_LEN, temp);
         
         // open laswriter
-
-        LASwriter* laswriter = laswriteopener.open(&lasreader->header);
-
+        if (reproject_quantizer) {
+          *header_writer = *reproject_quantizer;
+        }
+        LASwriter* laswriter = laswriteopener.open(header_writer);
         if (laswriter == 0)
         {
           laserror("could not open laswriter");
         }
 
         // for piped output we need to re-open the input file
-
         if (extra_pass)
         {
           if (!lasreadopener.reopen(lasreader))
@@ -2274,21 +2260,11 @@ int main(int argc, char* argv[])
             laserror("could not re-open lasreader");
           }
         }
-        else
-        {
-          if (reproject_quantizer)
-          {
-            lasreader->header = *saved_quantizer;
-            delete saved_quantizer;
-          }
-        }
 
         // maybe seek to start position
-
         if (subsequence_start) lasreader->seek(subsequence_start);
 
         // loop over points
-
         if (point) // full rewrite: point copy
         {
           while (lasreader->read_point())
@@ -2344,10 +2320,8 @@ int main(int argc, char* argv[])
         }
 
         // without the extra pass we need to fix the header now
-
         if (!extra_pass)
         {
-          if (reproject_quantizer) lasreader->header = *reproject_quantizer;
           laswriter->update_header(&lasreader->header, TRUE);
           LASMessage(LAS_VERBOSE, "total time: %g sec. written %u surviving points to '%s'.", taketime() - start_time, (U32)laswriter->p_count, laswriteopener.get_file_name());
         }

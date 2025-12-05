@@ -1107,48 +1107,54 @@ class LAScriterionKeepScanAngle : public LAScriterion
 {
 public:
   inline const CHAR* name() const { return "keep_scan_angle"; };
-  inline I32 get_command(CHAR* string) const { return sprintf(string, "-%s %d %d ", name(), below_scan, above_scan); };
+  inline I32 get_command(CHAR* string) const { return sprintf(string, "-%s %.3f %.3f ", name(), below_scan, above_scan); };
   inline U32 get_decompress_selective() const { return LASZIP_DECOMPRESS_SELECTIVE_SCAN_ANGLE; };
-  inline BOOL filter(const LASpoint* point) { return (point->scan_angle_rank < below_scan) || (above_scan < point->scan_angle_rank); };
-  LAScriterionKeepScanAngle(I32 below_scan, I32 above_scan) { if (above_scan < below_scan) { this->below_scan = above_scan; this->above_scan = below_scan; } else { this->below_scan = below_scan; this->above_scan = above_scan; } };
+  inline BOOL filter(const LASpoint* point) { return (point->get_scan_angle() < below_scan) || (above_scan < point->get_scan_angle()); };
+  LAScriterionKeepScanAngle(F32 below_scan, F32 above_scan) { if (above_scan < below_scan) { this->below_scan = above_scan; this->above_scan = below_scan; } 
+    else { this->below_scan = below_scan; this->above_scan = above_scan; } };
 private:
-  I32 below_scan, above_scan;
+  F32 below_scan, above_scan;
 };
 
 class LAScriterionDropScanAngleBelow : public LAScriterion
 {
 public:
   inline const CHAR* name() const { return "drop_scan_angle_below"; };
-  inline I32 get_command(CHAR* string) const { return sprintf(string, "-%s %d ", name(), below_scan); };
+  inline I32 get_command(CHAR* string) const { return sprintf(string, "-%s %.3f ", name(), below_scan); };
   inline U32 get_decompress_selective() const { return LASZIP_DECOMPRESS_SELECTIVE_SCAN_ANGLE; };
-  inline BOOL filter(const LASpoint* point) { return (point->scan_angle_rank < below_scan); };
-  LAScriterionDropScanAngleBelow(I32 below_scan) { this->below_scan = below_scan; };
+  inline BOOL filter(const LASpoint* point) { return (point->get_scan_angle() < below_scan); };
+  LAScriterionDropScanAngleBelow(F32 below_scan) { this->below_scan = below_scan; };
 private:
-  I32 below_scan;
+  F32 below_scan;
 };
 
 class LAScriterionDropScanAngleAbove : public LAScriterion
 {
 public:
   inline const CHAR* name() const { return "drop_scan_angle_above"; };
-  inline I32 get_command(CHAR* string) const { return sprintf(string, "-%s %d ", name(), above_scan); };
+  inline I32 get_command(CHAR* string) const { return sprintf(string, "-%s %.3f ", name(), above_scan); };
   inline U32 get_decompress_selective() const { return LASZIP_DECOMPRESS_SELECTIVE_SCAN_ANGLE; };
-  inline BOOL filter(const LASpoint* point) { return (point->scan_angle_rank > above_scan); };
-  LAScriterionDropScanAngleAbove(I32 above_scan) { this->above_scan = above_scan; };
+  inline BOOL filter(const LASpoint* point) {
+    return (point->get_scan_angle() > above_scan);
+  };
+  LAScriterionDropScanAngleAbove(F32 above_scan) { this->above_scan = above_scan; };
 private:
-  I32 above_scan;
+  F32 above_scan;
 };
 
 class LAScriterionDropScanAngleBetween : public LAScriterion
 {
 public:
   inline const CHAR* name() const { return "drop_scan_angle_between"; };
-  inline I32 get_command(CHAR* string) const { return sprintf(string, "-%s %d %d ", name(), below_scan, above_scan); };
+  inline I32 get_command(CHAR* string) const { return sprintf(string, "-%s %.3f %.3f ", name(), below_scan, above_scan); };
   inline U32 get_decompress_selective() const { return LASZIP_DECOMPRESS_SELECTIVE_SCAN_ANGLE; };
-  inline BOOL filter(const LASpoint* point) { return (below_scan <= point->scan_angle_rank) && (point->scan_angle_rank <= above_scan); };
-  LAScriterionDropScanAngleBetween(I32 below_scan, I32 above_scan) { if (above_scan < below_scan) { this->below_scan = above_scan; this->above_scan = below_scan; } else { this->below_scan = below_scan; this->above_scan = above_scan; } };
+  inline BOOL filter(const LASpoint* point) {
+    return (below_scan <= point->get_scan_angle()) && (point->get_scan_angle() <= above_scan);
+  };
+  LAScriterionDropScanAngleBetween(F32 below_scan, F32 above_scan) { if (above_scan < below_scan) { this->below_scan = above_scan; this->above_scan = below_scan; } 
+    else { this->below_scan = below_scan; this->above_scan = above_scan; } };
 private:
-  I32 below_scan, above_scan;
+  F32 below_scan, above_scan;
 };
 
 class LAScriterionKeepIntensity : public LAScriterion
@@ -1830,9 +1836,9 @@ public:
       }
       else
       {
-        if (array == &minus_plus || array == &plus_plus) *ankers = (I32*)malloc(array_size_new * sizeof(I32));
-        *array = (U32**)malloc(array_size_new * sizeof(U32*));
-        *array_sizes = (U16*)malloc(array_size_new * sizeof(U16));
+        if (array == &minus_plus || array == &plus_plus) *ankers = (I32*)malloc_las(array_size_new * sizeof(I32));
+        *array = (U32**)malloc_las(array_size_new * sizeof(U32*));
+        *array_sizes = (U16*)malloc_las(array_size_new * sizeof(U16));
       }
       for (U32 i = *array_size; i < array_size_new; i++)
       {
@@ -1858,7 +1864,7 @@ public:
       }
       else
       {
-        if (array != nullptr && *array != nullptr && (*array)[pos_y] != nullptr) (*array)[pos_y] = (U32*)malloc(array_sizes_new * sizeof(U32));
+        if (array != nullptr && *array != nullptr) (*array)[pos_y] = (U32*)malloc_las(array_sizes_new * sizeof(U32));
       }
       for (U16 i = (*array_sizes)[pos_y]; i < array_sizes_new; i++)
       {
@@ -3188,14 +3194,14 @@ BOOL LASfilter::parse(int argc, char* argv[])
             laserror("'%s' needs 2 arguments: min max", argv[i]);
             return FALSE;
           }
-          I32 min;
-          if (sscanf(argv[i + 1], "%d", &min) != 1)
+          F32 min;
+          if (sscanf(argv[i + 1], "%f", &min) != 1)
           {
             laserror("'%s' needs 2 arguments: min max but '%s' is no valid min", argv[i], argv[i + 1]);
             return FALSE;
           }
-          I32 max;
-          if (sscanf(argv[i + 2], "%d", &max) != 1)
+          F32 max;
+          if (sscanf(argv[i + 2], "%f", &max) != 1)
           {
             laserror("'%s' needs 2 arguments: min max but '%s' is no valid max", argv[i], argv[i + 2]);
             return FALSE;
@@ -4728,8 +4734,8 @@ BOOL LASfilter::parse(int argc, char* argv[])
             laserror("'%s' needs 1 argument: max", argv[i]);
             return FALSE;
           }
-          I32 max;
-          if (sscanf(argv[i + 1], "%d", &max) != 1)
+          F32 max;
+          if (sscanf(argv[i + 1], "%f", &max) != 1)
           {
             laserror("'%s' needs 1 argument: max but '%s' is no valid max", argv[i], argv[i + 1]);
             return FALSE;
@@ -4744,8 +4750,8 @@ BOOL LASfilter::parse(int argc, char* argv[])
             laserror("'%s' needs 1 argument: min", argv[i]);
             return FALSE;
           }
-          I32 min;
-          if (sscanf(argv[i + 1], "%d", &min) != 1)
+          F32 min;
+          if (sscanf(argv[i + 1], "%f", &min) != 1)
           {
             laserror("'%s' needs 1 argument: min but '%s' is no valid min", argv[i], argv[i + 1]);
             return FALSE;
@@ -4763,8 +4769,8 @@ BOOL LASfilter::parse(int argc, char* argv[])
             laserror("'%s' needs 1 argument: max", argv[i]);
             return FALSE;
           }
-          I32 max;
-          if (sscanf(argv[i + 1], "%d", &max) != 1)
+          F32 max;
+          if (sscanf(argv[i + 1], "%f", &max) != 1)
           {
             laserror("'%s' needs 1 argument: max but '%s' is no valid max", argv[i], argv[i + 1]);
             return FALSE;
@@ -4779,8 +4785,8 @@ BOOL LASfilter::parse(int argc, char* argv[])
             laserror("'%s' needs 1 argument: min", argv[i]);
             return FALSE;
           }
-          I32 min;
-          if (sscanf(argv[i + 1], "%d", &min) != 1)
+          F32 min;
+          if (sscanf(argv[i + 1], "%f", &min) != 1)
           {
             laserror("'%s' needs 1 argument: min but '%s' is no valid min", argv[i], argv[i + 1]);
             return FALSE;
@@ -4795,14 +4801,14 @@ BOOL LASfilter::parse(int argc, char* argv[])
             laserror("'%s' needs 2 arguments: min max", argv[i]);
             return FALSE;
           }
-          I32 min;
-          if (sscanf(argv[i + 1], "%d", &min) != 1)
+          F32 min;
+          if (sscanf(argv[i + 1], "%f", &min) != 1)
           {
             laserror("'%s' needs 2 arguments: min max but '%s' is no valid min", argv[i], argv[i + 1]);
             return FALSE;
           }
-          I32 max;
-          if (sscanf(argv[i + 2], "%d", &max) != 1)
+          F32 max;
+          if (sscanf(argv[i + 2], "%f", &max) != 1)
           {
             laserror("'%s' needs 2 arguments: min max but '%s' is no valid max", argv[i], argv[i + 2]);
             return FALSE;
