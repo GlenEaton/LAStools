@@ -36,11 +36,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdarg>
-#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <string>
-#include <stdio.h>
 #ifdef _WIN32
 #include <windows.h>
 #else
