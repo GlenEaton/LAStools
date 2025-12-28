@@ -39,7 +39,6 @@
 #include <cstring>
 #include <filesystem>
 #include <string>
-#include <stdio.h>
 #ifdef _WIN32
 #include <windows.h>
 #else
