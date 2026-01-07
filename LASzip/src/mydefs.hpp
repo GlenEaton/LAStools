@@ -57,8 +57,8 @@
 #include <cstdarg>
 #include <vector>
 #include <sys/stat.h>
-
 #include <cmath>
+#include <filesystem>
 #include <type_traits>
 
 typedef char CHAR;
@@ -417,7 +417,7 @@ extern void LASLIB_DLL byebye();
 bool validate_utf8(const char* utf8, bool restrict_to_two_bytes = false) noexcept;
 // Opens a file with the specified filename and mode, converting filename and mode to UTF-16 on Windows.
 FILE* LASfopen(const char* const filename, const char* const mode);
-void FileDelete(std::string filename, LAS_MESSAGE_TYPE onFailMsg = LAS_WARNING);
+void FileDelete(std::filesystem::path file, LAS_MESSAGE_TYPE onFailMsg = LAS_WARNING);
 const char* indent_text(const char* text, const char* indent);
 
 // las error message function which leads to an immediate program stop by default
