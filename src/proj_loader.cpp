@@ -831,10 +831,7 @@ bool load_proj_library(const char* path, bool isNecessary/*=true*/) {
     laserror("Failed to load necessary PROJ functions. This application requires PROJ version 9.0.0 or later for full functionality. Loaded PROJ version: %s", version.c_str());
   }
 
-#ifdef _WIN32
-  // gpf at linux
   checkProjVersion();
-#endif
 
   return true;
 #pragma warning(pop)
