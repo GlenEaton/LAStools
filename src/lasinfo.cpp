@@ -253,7 +253,7 @@ public:
     I64 subsequence_stop = I64_MAX;
     U32 progress = 0;
     // rename
-    CHAR* base_name = 0;
+    CHAR* base_name = nullptr;
     JsonObject json_main;
 
     LAShistogram lashistogram;
@@ -1221,35 +1221,27 @@ public:
       lasheader = &lasreader->header;
 
       if (base_name && lasreadopener.get_file_name()) {
+        LASMessage(LAS_VERBOSE, "renaming '%s' with %lld points", lasreadopener.get_file_name(), lasreader->npoints);
         lasreader->close();
 
-#ifdef _WIN32
-        LASMessage(LAS_VERBOSE, "renaming '%s' with %lld points", lasreadopener.get_file_name(), lasreader->npoints);
-#else
-        laserror("renaming not implemented ...");
-#endif
+        std::filesystem::path old_path(lasreadopener.get_file_name());
+        std::filesystem::path extension = old_path.extension();
 
-        std::string command(4096, '\0');
-        if (strlen(base_name)) {
-          snprintf(
-              command.data(), sizeof(command), "rename \"%s\" \"%s_%d_%d.xxx\"", lasreadopener.get_file_name(), base_name,
-              I32_QUANTIZE(lasheader->min_x), I32_QUANTIZE(lasheader->min_y));
+        std::string new_name;
+        if (base_name && std::strlen(base_name) > 0) {
+          new_name =  std::string(base_name) + "_" + std::to_string(I32_QUANTIZE(lasheader->min_x)) + "_" + std::to_string(I32_QUANTIZE(lasheader->min_y));
         } else {
-          snprintf(
-              command.data(), sizeof(command), "rename \"%s\" \"%d_%d.xxx\"", lasreadopener.get_file_name(), I32_QUANTIZE(lasheader->min_x),
-              I32_QUANTIZE(lasheader->min_y));
+          new_name = std::to_string(I32_QUANTIZE(lasheader->min_x)) + "_" + std::to_string(I32_QUANTIZE(lasheader->min_y));
         }
-        int len1 = (int)strlen(lasreadopener.get_file_name());
-        int len2 = (int)strlen(command.data());
-        command[len2 - 4] = lasreadopener.get_file_name()[len1 - 3];
-        command[len2 - 3] = lasreadopener.get_file_name()[len1 - 2];
-        command[len2 - 2] = lasreadopener.get_file_name()[len1 - 1];
+        std::filesystem::path new_path = old_path.parent_path() / (new_name + extension.string());
+
         delete lasreader;
+        LASMessage(LAS_VERBOSE, "renaming '%s' to '%s'", old_path.string().c_str(), new_path.string().c_str());
 
-        LASMessage(LAS_VERBOSE, "executing '%s'", command.c_str());
-
-        if (system(command.data()) != 0) {
-          laserror("failed to execute '%s'", command.c_str());
+        try {
+          std::filesystem::rename(old_path, new_path);
+        } catch (const std::filesystem::filesystem_error& e) {
+          laserror("rename failed: %s", e.what());
         }
         continue;
       }
