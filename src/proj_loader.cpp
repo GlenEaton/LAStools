@@ -294,19 +294,50 @@ static std::string findProjLibInStandartPaths(std::set<std::filesystem::path>& s
   return "";
 }
 
-/// Checks whether the loaded PROJ version reaches at least minMajor.minMinor.
-/// Returns a warning if this version is too old.
-static void checkProjVersion() {
-  MyPJ_INFO info = my_proj_info();
-  
-  if (info.version) {
-    LASMessage(LAS_VERBOSE, "Loaded PROJ version: %s", info.version);
+///-------------------------------
+//Due to the PJ_INFO structure and its data types, 100% guarantee of ABI security cannot be provided here.
+//To date, there are no alternatives in the Proj C-ABI for querying versions of the lib.
+///-------------------------------
+///// Checks whether the loaded PROJ version reaches at least minMajor.minMinor.
+///// Returns a warning if this version is too old.
+//static void checkProjVersion() {
+//  MyPJ_INFO info = my_proj_info();
+//  
+//  if (info.version) {
+//    LASMessage(LAS_VERBOSE, "Loaded PROJ version: %s", info.version);
+//
+//    if (info.major < 9) {
+//      LASMessage(LAS_WARNING, "The loaded PROJ version '%s' is older than version 9.0.0. Full functionality cannot be guaranteed with this version.", info.version);
+//    }
+//  } else {
+//    LASMessage(LAS_WARNING, "The loaded PROJ version could not be determined");
+//  }
+//}
+///-------------------------------
 
-    if (info.major < 9) {
-      LASMessage(LAS_WARNING, "The loaded PROJ version '%s' is older than version 9.0.0. Full functionality cannot be guaranteed with this version.", info.version);
+/// Checks the major PROJ version based on the loaded library filename >= 9.
+/// The version is extracted from the library name as a fallback, since the PROJ C-API version query 
+/// cannot be used safely without ABI guarantees.
+static void checkProjMajorVersion(const std::string& loadedProjLibPath) {
+  std::filesystem::path proj(loadedProjLibPath);
+  std::string name = proj.filename().string();
+
+  std::vector<int> versions = parseVersion(name);
+  int major = -1;
+
+  if (!versions.empty()) {
+    // In libproj.so filenames, the PROJ major version is usually in the second position.
+    if (name.rfind("libproj.so.", 0) == 0 && versions.size() > 1) {
+      major = versions[1];
+    } else {
+      major = versions[0];
     }
-  } else {
-    LASMessage(LAS_WARNING, "The loaded PROJ version could not be determined");
+  }
+
+  if (major < 0) {
+    LASMessage(LAS_WARNING, "The loaded PROJ version could not be determined from library name '%s'", name.c_str());
+  } else if (major < 9) {
+    LASMessage(LAS_WARNING, "The loaded PROJ version (major %d) is older than version 9.0.0. Full functionality cannot be guaranteed with this version.", major);
   }
 }
 
@@ -752,6 +783,7 @@ bool load_proj_library(const char* path, bool isNecessary/*=true*/) {
     for (const std::string& candidate : sortedVersions) {
       proj_lib_handle = LOAD_LIBRARY(candidate.c_str());
       if (proj_lib_handle) {
+        checkProjMajorVersion(candidate);
         LASMessage(LAS_VERBOSE, "The latest valid PROJ library found will be used: %s", candidate.c_str());
         break;
       } else {
@@ -831,7 +863,11 @@ bool load_proj_library(const char* path, bool isNecessary/*=true*/) {
     laserror("Failed to load necessary PROJ functions. This application requires PROJ version 9.0.0 or later for full functionality. Loaded PROJ version: %s", version.c_str());
   }
 
-  checkProjVersion();
+
+//#ifdef _WIN32
+//  // gpf at linux
+//  checkProjVersion();
+//#endif
 
   return true;
 #pragma warning(pop)
