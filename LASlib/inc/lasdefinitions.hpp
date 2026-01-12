@@ -302,9 +302,9 @@ public:
       }
       else
       {
-        x_offset = ((I32)((min_x + max_x)/200000))*100000;
-        y_offset = ((I32)((min_y + max_y)/200000))*100000;
-        z_offset = ((I32)((min_z + max_z)/200000))*100000;
+        x_offset = ((I32)((min_x + max_x)/200000))*100000.0;
+        y_offset = ((I32)((min_y + max_y)/200000))*100000.0;
+        z_offset = ((I32)((min_z + max_z)/200000))*100000.0;
       }
     }
     this->min_x = x_offset + x_scale_factor*I32_QUANTIZE((min_x-x_offset)/x_scale_factor);
@@ -992,7 +992,7 @@ public:
       vlr_geo_ogc_wkt_math[num_geo_wkt_ogc_math] = '\0';
     }
     memcpy(vlr_geo_ogc_wkt_math, geo_wkt_ogc_math, sizeof(CHAR)*num_geo_wkt_ogc_math);
-    add_vlr("LASF_Projection", 2111, (U16)(sizeof(CHAR)*(num_geo_wkt_ogc_math+null_terminator)), (U8*)vlr_geo_ogc_wkt_math);
+    add_vlr("LASF_Projection", 2111, (U16)(sizeof(CHAR)*(static_cast<I64>(num_geo_wkt_ogc_math)+null_terminator)), (U8*)vlr_geo_ogc_wkt_math);
   }
 
   void del_geo_wkt_ogc_math()
@@ -1037,11 +1037,11 @@ public:
     memcpy(vlr_geo_ogc_wkt, geo_ogc_wkt, sizeof(CHAR)*num_geo_ogc_wkt);
     if (in_evlr)
     {
-      add_evlr("LASF_Projection", 2112, sizeof(CHAR)*(num_geo_ogc_wkt+null_terminator), (U8*)vlr_geo_ogc_wkt);
+      add_evlr("LASF_Projection", 2112, sizeof(CHAR)*(static_cast<I64>(num_geo_ogc_wkt)+null_terminator), (U8*)vlr_geo_ogc_wkt);
     }
     else
     {
-      add_vlr("LASF_Projection", 2112, (U16)(sizeof(CHAR)*(num_geo_ogc_wkt+null_terminator)), (U8*)vlr_geo_ogc_wkt);
+      add_vlr("LASF_Projection", 2112, (U16)(sizeof(CHAR)*(static_cast<I64>(num_geo_ogc_wkt)+null_terminator)), (U8*)vlr_geo_ogc_wkt);
     }
   }
 

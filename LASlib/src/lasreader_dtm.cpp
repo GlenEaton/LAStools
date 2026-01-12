@@ -1029,8 +1029,8 @@ BOOL LASreaderDTM::open(const CHAR* file_name)
 
   header.min_x = ll_x;
   header.min_y = ll_y;
-  header.max_x = ll_x + (ncols-1)*xdim;
-  header.max_y = ll_y + (nrows-1)*ydim;
+  header.max_x = ll_x + (ncols-1)*static_cast<F64>(xdim);
+  header.max_y = ll_y + (nrows-1)*static_cast<F64>(ydim);
   header.min_z = F64_MAX;
   header.max_z = F64_MIN;
 
@@ -1284,8 +1284,8 @@ BOOL LASreaderDTM::read_point_default()
 
     if (elevation != nodata)
     {
-      F64 x = ll_x + col* xdim;
-      F64 y = ll_y + row * ydim;
+      F64 x = ll_x + col* static_cast<F64>(xdim);
+      F64 y = ll_y + row * static_cast<F64>(ydim);
       F64 z = elevation;
 
       if (opener->is_offset_adjust() == FALSE)
@@ -1321,15 +1321,15 @@ BOOL LASreaderDTM::read_point_default()
           Z = ((I64)(((z - orig_z_offset) / orig_z_scale_factor) - 0.5));
 
         if (I32_FITS_IN_RANGE(X))
-          point.set_X(X);
+          point.set_X(static_cast<I32>(X));
         else
           overflow_I32_x++;
         if (I32_FITS_IN_RANGE(Y))
-          point.set_Y(Y);
+          point.set_Y(static_cast<I32>(Y));
         else
           overflow_I32_y++;
         if (I32_FITS_IN_RANGE(Z))
-          point.set_Z(Z);
+          point.set_Z(static_cast<I32>(Z));
         else
           overflow_I32_z++;
       }

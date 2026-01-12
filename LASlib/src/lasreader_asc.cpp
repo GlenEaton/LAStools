@@ -236,8 +236,8 @@ BOOL LASreaderASC::open(const CHAR* file_name, BOOL comma_not_point)
 
   header.min_x = xllcenter;
   header.min_y = yllcenter;
-  header.max_x = xllcenter + (ncols - 1) * cellsize;
-  header.max_y = yllcenter + (nrows - 1) * cellsize;
+  header.max_x = xllcenter + (ncols - 1) * static_cast<F64>(cellsize);
+  header.max_y = yllcenter + (nrows - 1) * static_cast<F64>(cellsize);
 
   // init the bounding box z and count the rasters
 
@@ -420,8 +420,8 @@ BOOL LASreaderASC::read_point_default()
     // should we use the raster
     if (elevation != nodata)
     {
-      F64 x = xllcenter + col * cellsize;
-      F64 y = yllcenter + (nrows - row - 1) * cellsize;
+      F64 x = xllcenter + col * static_cast<F64>(cellsize);
+      F64 y = yllcenter + (static_cast<I64>(nrows) - row - 1) * static_cast<F64>(cellsize);
       F64 z = elevation; 
 
       if (opener->is_offset_adjust() == FALSE)
@@ -460,15 +460,15 @@ BOOL LASreaderASC::read_point_default()
           Z = ((I64)(((z - orig_z_offset) / orig_z_scale_factor) - 0.5));
 
         if (I32_FITS_IN_RANGE(X))
-          point.set_X(X);
+          point.set_X(static_cast<I32>(X));
         else
           overflow_I32_x++;
         if (I32_FITS_IN_RANGE(Y))
-          point.set_Y(Y);
+          point.set_Y(static_cast<I32>(Y));
         else
           overflow_I32_y++;
         if (I32_FITS_IN_RANGE(Z))
-          point.set_Z(Z);
+          point.set_Z(static_cast<I32>(Z));
         else
           overflow_I32_z++;
       }

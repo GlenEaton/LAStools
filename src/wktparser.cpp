@@ -194,7 +194,7 @@ std::string WktParser::WktFormat(bool flat, const short indent, const short inde
     } else if (c == '[') {
       // output last key in new line with indent
       if (!result.empty()) result += '\n';
-      result += std::string(indent_offset, ' ') + std::string(level * indent, ' ') + BOOST_PRE trim(token) + c;
+      result += std::string(indent_offset, ' ') + std::string(static_cast<size_t>(level) * indent, ' ') + BOOST_PRE trim(token) + c;
       level++;
       token = "";
     } else if (c == ']') {
@@ -286,7 +286,7 @@ int WktParser::ValueInt(const std::string& key, const double def) {
   if (HasValueInt(key, ret)) {
     return ret;
   } else {
-    return def;
+    return static_cast<int>(def);
   }
 }
 

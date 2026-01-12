@@ -1687,8 +1687,8 @@ BOOL LASoccupancyGrid::write_asc_grid(const CHAR* file_name) const
   if (file == 0) return FALSE;
   fprintf(file, "ncols %d\012", max_x-min_x+1);
   fprintf(file, "nrows %d\012", max_y-min_y+1);
-  fprintf(file, "xllcorner %f\012", grid_spacing*min_x);
-  fprintf(file, "yllcorner %f\012", grid_spacing*min_y);
+  fprintf(file, "xllcorner %f\012", static_cast<F64>(grid_spacing)*min_x);
+  fprintf(file, "yllcorner %f\012", static_cast<F64>(grid_spacing)*min_y);
   fprintf(file, "cellsize %lf\012", grid_spacing);
   fprintf(file, "NODATA_value %d\012", 0);
   fprintf(file, "\012");
