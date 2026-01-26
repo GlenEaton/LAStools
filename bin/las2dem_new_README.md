@@ -1,11 +1,18 @@
-﻿# las2dem
+﻿# las2dem_new
 
 Rasters LiDAR (via a temporary TIN) to hillshade, slope,
 elevation, RGB or false color grid.
-Please also have a look at las2dem_new, which is a complete
-redesign and offers significant advantages in terms of speed.
 
-las2dem reads LIDAR points from the LAS/LAZ format (or some
+This tool is a
+- complete redesign of las2dem.
+- processes large files significantly faster while retaining
+  the popular "spike free" argument, resulting in smoother
+  output [https://rapidlasso.de/generating-spike-free-digital-surface-models-from-lidar].
+- combines the speed of blast2dem with the ability of las2dem
+  to perform spike-free operations (which blast2dem cannot do
+  due to the architecture of the algorithm).
+
+las2dem_new reads LIDAR points from the LAS/LAZ format (or some
 ASCII format), triangulates them temporarily into a TIN, and
 then rasters the TIN onto a DEM. The tool can either rather
 the '-elevation' (default), the '-slope', the '-intensity', the 
@@ -72,48 +79,48 @@ of LAS/LAZ data into a seamless DEM (optionally tiled on output).
 
 (using LAZ file from the .\lastools\data folder)
 
-    las2dem64 -i ..\data\TO_core_last_zoom.laz -o dem.asc -v
-    las2dem64 -i ..\data\TO_core_last_zoom.laz -o dem.bil -v -step 0.5
-    las2dem64 -i ..\data\TO_core_last_zoom.laz -o dem.bil -v -nbits 16
-    las2dem64 -i ..\data\TO_core_last_zoom.laz -o dem.asc -v -intensity
-    las2dem64 -i ..\data\TO_core_last_zoom.laz -o dem.bil -v -intensity -step 2.0
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.asc -v
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.bil -v -step 0.5
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.bil -v -nbits 16
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.asc -v -intensity
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.bil -v -intensity -step 2.0
 
-    las2dem64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -hillshade
-    las2dem64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -hillshade -light 0 0 1
-    las2dem64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -gray
-    las2dem64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -false
-    las2dem64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -set_min_max 46.83 90 -gray 
-    las2dem64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -set_min_max 46.83 90 -false 
-    las2dem64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -intensity -set_min_max 0 1000 -gray 
-    las2dem64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -intensity -set_min_max 0 1000 -false
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -hillshade
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -hillshade -light 0 0 1
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -gray
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -false
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -set_min_max 46.83 90 -gray 
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -set_min_max 46.83 90 -false 
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -intensity -set_min_max 0 1000 -gray 
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -intensity -set_min_max 0 1000 -false
 
-    las2dem64 -i ..\data\TO_core_last_zoom.laz -o dem.png -v -hillshade -nrows 200 -ncols 100
-    las2dem64 -i ..\data\TO_core_last_zoom.laz -o dem.png -v -hillshade -nrows 200 -ncols 100 -ll 630300 4834550
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -v -hillshade -nrows 200 -ncols 100
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -v -hillshade -nrows 200 -ncols 100 -ll 630300 4834550
 
 
-    las2dem64 -i *.las -oasc
+    las2dem_new64 -i *.las -oasc
 
 rasters the elevations of all LAS files *.las with step size 1 and
 stores the resulting DEM in ASC format.
 
-    las2dem64 -i *.laz -opng -utm 17T -step 2.5 -hillshade
+    las2dem_new64 -i *.laz -opng -utm 17T -step 2.5 -hillshade
 
 rasters the hillside-shaded elevations of all LAZ files *.laz with
 step size 2.5 and stores the resulting DEM in PNG format and with
 it a KML file that geo-references each PNG in GE with UTM zone 17T.
 
-    las2dem64 -i *.txt -iparse xyzi -obil -step 2 -intensity
+    las2dem_new64 -i *.txt -iparse xyzi -obil -step 2 -intensity
 
 rasters the intensities of all ASCII files *.txt with step size 2
 and stores the resulting DEM in BIL format with 16 bit precision.
 
-    las2dem64 -i lidar.las -o dem.asc -step 2
+    las2dem_new64 -i lidar.las -o dem.asc -step 2
 
 creates a temporary TIN from all points in the LAS file 'lidar.las',
 rasters the elevation values of each TIN facet onto a grid with step
 size 2, and stores the resulting DEM in ASC format.
 
-    las2dem64 -i lidar.txt -iparse ssxysi-o dem.bil -step 0.5 -intensity
+    las2dem_new64 -i lidar.txt -iparse ssxysi-o dem.bil -step 0.5 -intensity
 
 creates a temporary TIN from all points in the ASCII file 'lidar.txt'
 using the 3rd and 4th line entry as the x and y coordinate and the 5th
@@ -121,14 +128,14 @@ as the intensity, rasters the intensity values of each TIN facet onto
 a grid with step size 0.5, and stores the resulting DEM in BIL format
 with 16 bit precision.
 
-    las2dem64 -lof lidar_files.txt -merged -o dem.bil -last_only
+    las2dem_new64 -lof lidar_files.txt -merged -o dem.bil -last_only
 
 creates a temporary TIN from all last returns of all files listed in
 the text file 'lidar_files.txt', rasters the elevation values of
 each TIN facet onto a grid with step size 1 and stores the resulting
 DEM in BIL format with 32 bit floating-point precision.
 
-    las2dem64 -i lidar.las lidar2.las lidar3.las -merged -hillshade -o dem.png -step 5 -keep_class 2
+    las2dem_new64 -i lidar.las lidar2.las lidar3.las -merged -hillshade -o dem.png -step 5 -keep_class 2
 
 creates a temporary TIN from the merged ground points (i.e. points
 with classification 2) of the 3 LAS files 'lidar1.las', 'lidar2.las',
@@ -136,7 +143,7 @@ and 'lidar3.las', rasters hillside-shaded TIN facets onto a grid with
 step size 5, and stores the resulting grid in PNG format with 8 bit
 per pixel.
 
-    las2dem64 -i lidar1.txt -i lidar2.txt -iparse xyz -o dem.jpg -hillshade -last_only
+    las2dem_new64 -i lidar1.txt -i lidar2.txt -iparse xyz -o dem.jpg -hillshade -last_only
 
 creates a temporary TIN from the last returns of the two ASCII files
 'lidar1.txt' and 'lidar2.txt' using the 1st, 2nd, and 3rd, entry on
@@ -144,14 +151,14 @@ each line as the x, y, and z coordinate, rasters hillside-shaded TIN
 facets onto a grid with step size 5, and stores the resulting grid
 in JPG format with 8 bit per pixel.
 
-    las2dem64 -i lidar.las -o dem.tif -first_only -gray -step 2
+    las2dem_new64 -i lidar.las -o dem.tif -first_only -gray -step 2
 
 creates a temporary TIN from all first returns in the LAS file
 'lidar.las', rasters the elevation values of each TIN facet with
 gray-scale elevation coloring onto a grid with step size 2, and
 stores the resulting grid in TIF format with 8 bit per pixel.
 
-    las2dem64 -i lidar.las -o dem.png -first_only -false -step 2 -utm 14T
+    las2dem_new64 -i lidar.las -o dem.png -first_only -false -step 2 -utm 14T
 
 same as above but with false elevation coloring and output of a KML
 file that georeferences the PNG file in Google Earth
@@ -161,12 +168,12 @@ Try the following commands for generating some interesting georeferenced
 DEMs that you can look at in Google Earth by double clicking the automatically
 generated KML file:
 
-    las2dem64 -i ..\data\test.las -false -intensity -o test.png
-    las2dem64 -i ..\data\TO_core_last_zoom.las -hillshade -o toronto.png -utm 17T
-    las2dem64 -i ..\data\SerpentMound.las -hillshade -o SerpentMound.png
+    las2dem_new64 -i ..\data\test.las -false -intensity -o test.png
+    las2dem_new64 -i ..\data\TO_core_last_zoom.las -hillshade -o toronto.png -utm 17T
+    las2dem_new64 -i ..\data\SerpentMound.las -hillshade -o SerpentMound.png
 
 
-## las2dem specific arguments
+## las2dem_new specific arguments
 
 ### rasterization
 -elevation                 : use elevation as values (default)  
