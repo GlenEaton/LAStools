@@ -174,8 +174,8 @@ BOOL LASreader::inside_tile(const F32 ll_x, const F32 ll_y, const F32 size) {
   orig_max_y = header.max_y;
   header.min_x = ll_x;
   header.min_y = ll_y;
-  header.max_x = ll_x + size;
-  header.max_y = ll_y + size;
+  header.max_x = static_cast<F64>(ll_x) + static_cast<F64>(size);
+  header.max_y = static_cast<F64>(ll_y) + static_cast<F64>(size);
   header.max_x -= header.x_scale_factor;
   header.max_y -= header.y_scale_factor;
   if (((orig_min_x > header.max_x) || (orig_min_y > header.max_y) || (orig_max_x < header.min_x) || (orig_max_y < header.min_y))) {

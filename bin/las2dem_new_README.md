@@ -1,325 +1,237 @@
-﻿# las2las
+﻿# las2dem_new
 
-reads and writes LIDAR data in LAS/LAZ/ASCII format to filter,
-transform, project, thin, or otherwise modify its contents.
+Rasters LiDAR (via a temporary TIN) to hillshade, slope,
+elevation, RGB or false color grid.
 
-Sometimes it is not neccessary to use las2las prior other
-lastools, because most arguments can be used by the other
-tool as well.
+This tool is a
+- complete redesign of las2dem.
+- processes large files significantly faster while retaining
+  the popular "spike free" argument, resulting in smoother
+  output [https://rapidlasso.de/generating-spike-free-digital-surface-models-from-lidar].
+- combines the speed of blast2dem with the ability of las2dem
+  to perform spike-free operations (which blast2dem cannot do
+  due to the architecture of the algorithm).
 
-Examples are keeping only those points that are within a
-rextangle '-keep_xy 10 10 20 20' or points that are between
-a certain height '-keep_z 10 100', or dropping points that
-are a certain return '-drop_return 2', that have a scan angle
-above some threshold '-drop_scan_angle_above 5', or below some
-intensity '-drop_intensity_below 15'. Sometimes points are far
-outside the bounding box (corrupted files) and it is handy to
-remove them with '-crop_to_bounding_box'.
+las2dem_new reads LIDAR points from the LAS/LAZ format (or some
+ASCII format), triangulates them temporarily into a TIN, and
+then rasters the TIN onto a DEM. The tool can either rather
+the '-elevation' (default), the '-slope', the '-intensity', the 
+'-rgb' values, or a '-hillshade' or '-gray' or '-false' coloring. 
+The output is either in BIL, ASC, IMG, FLT, XYZ, DTM, TIF, PNG or
+JPG format. Additional attributes that some LAS/LAZ files can
+store as "Extra Bytes" can be rasterized with '-attribute 0'
+or '-attribute 1' or '-attribute 2' ...
 
-Another typical use is extract only first (-first_only) or only
-last (-last_only) returns. Extracting the first return is the
-same as dropping all others (e.g. -drop_return 2 3 4 5).
+For BIL, ASC, IMG, DTM, and XYZ output one typically stores
+the actual '-elevation' or '-intensity' values whereas the
+TIF, PNG, and JPG formats are usually used for a '-hillshade',
+'-gray', or '-false' coloring, or for the '-rgb' raster. The
+particular range of values to be color mapped can be clamped
+using '-set_min_max 10 100' or can be set '-compute_min_max'.
+The color ramps can be inverted with '-invert_ramp'.
 
-Or one can extract a subsequence of 1000 points (-subseq 540 1000)
-which will start at point 540.
+An interesting option rasterizes the length of the longest
+or shortest edge around every vertex, which is useful for point
+spacing analysis across the surveyed area. Use '-edge_longest'
+or '-edge_shortest' to enable these options.
 
-It is also possible to keep or drop certain classifications.
-The option -keep_class 2 3 will keep only those points that are
-of classification 2 or 3 and the option -drop_class 2 3 will drop
-only those points. For all options run 'las2las -h'.
+If you use filters such as '-last_only' or '-keep_class 2' you
+may use the '-extra_pass' option to first determine how many
+points get triangulated. This saves memory.
 
-## projections
+Closed breaklines can be supplied for hydro-enforcment of
+lakes, for example ('-lakes lakes.shp', '-lakes hydro.txt')
+but they must form proper closed polygons and have elevations.
 
-las2las can add missing projection information to the LAS/LAZ file
-or reproject (using the same ellipsoid) for example from latitude/longitude
-to UTM or the stateplane of Ohio_North or to Earth-centered Earth-fixed (ECEF).
-You can also use common EPSG codes with '-epsg 32754'. 
-For LAS 1.4 it is important to '-set_ogc_wkt' or '-set_proj_wkt' which translates
-the GeoTIFF keys into an CRS string in the OGC WKT format and adds them
-as the payload of the corresponding VLR.
+Hard breaklines can be integrated for improving the TIN before
+it is sampled with ('-creeks roads.shp', '-creeks creeks.txt')
+and while they can be open they must also have elevations.
 
-## las2las with PROJ
+By default the generated raster is sized based on the extend
+of the bounding box. If the LAS/LAZ file was generated using
+lastile, its extend can be set to that of the tile using the
+'-use_tile_bb' option. Any "border buffer" that the tile may
+have had is then not rastered. This allows to avoid boundary
+artifacts and yet create matching tiles in parallel. The exact
+raster extend can also be defined by setting '-ll min_x min_y'
+together with '-ncols 512' and '-nrows 512'.    
 
-Using the PROJ library it is possible to transform between 
-different Coordinate Reference Systems (CRSs) using the argument '-proj_epsg'.
-Specifying the source CRS is optional for all commands. If no source CRS is
-specified, the tool will attempt to extract this information from the header of
-the input file 
-'in.laz', which is recommended.
-There is a hierarchy for determining the source CRS for the PROJ transformation:
-1. the source CRS is passed as an argument.
-2. if not, the WKT is searched for in the header of the source file.
-3. if no WKT is available, it is generated from the GeoTIFF data.
-4. if this is not possible, the EPSG code from the GeoTIFF is used, which can
-   lead to inaccuracies as GeoTIFF arguments could be ignored.
+By default triangles whose edges are longer than 100 meters are
+not rasterized. This value can be changed with '-kill 200'. The
+value is always assumed to be meters and will be multipled with
+3.28 for LAS/LAZ files where x and y are known to be in feet.
 
-Files with CompoundCRS are not yet supported for transformations using PROJ in
-LAStools.
-The recommended methods for specifying CRSs are the use of EPSG codes or 
-WKT representations, as these adhere to well-defined standards:
- 
-    las2las64 -i in.laz -o out.laz -proj_epsg 32633 4326
-    las2las64 -i in.laz -o out.laz -proj_wkt filename_source_wkt filename_target_wkt
+Automatically a KML file is generated to allow the resulting
+DEM to be displayed inside Google Earth (for TIF/PNG/JPG). In
+case the LAS/LAZ file contains projection information (i.e. a
+VLR with geokeys) this is used for georeferencing the KML file.
+It is also possible to provide the georeferencing information
+in the command-line.
 
-The methods using the json representation or the PROJ string are only recommended 
-for advanced and experienced users. When using the PROJ string, a single PROJ string 
-can also be used directly to describe the transformation or operation.
-
-    las2las64 -i in.laz -o out.laz -proj_json filename_source_json filename_target_json
-    las2las64 -i in.laz -o out.laz -proj_string "proj_string_source" "proj_string_target"
-
-## Offset
-The following options are available for automatically setting a sensible offset of
-the point coordinates to avoid overflows:
-
--auto_reoffset: This option sets an appropriate offset in the header and  
-translates the points accordingly. 
-This option is only considered for LAS/LAZ input files and is recommended as long
-as no point coordinate operation or transformation is performed.
-
--offset_adjust: This option sets the offset based on the selected point coordinate  
-operations and transformations. 
-It is recommended to be used for such operations and transformations and is
-applicable to all supported input file formats.
+Please note that this software does not work in streaming mode 
+and is therefore not suited for large LAS files beyond 20 million 
+points. Use the BLAST extension (aka blast2dem) which work 
+efficiently out-of-core and can process up to 2 billion points 
+of LAS/LAZ data into a seamless DEM (optionally tiled on output).
 
 
 ## Examples
 
-    las2las64 -i s1885565.laz -o out.laz -sp83 OH_S -feet -elevation_feet
+(using LAZ file from the .\lastools\data folder)
 
-Adding the projection information to the file 's1885565.laz'. This
-will not modify the points but merely change the projection VLR in the
-header to contain these four geokeys:
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.asc -v
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.bil -v -step 0.5
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.bil -v -nbits 16
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.asc -v -intensity
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.bil -v -intensity -step 2.0
 
-  GeoKeyDirectoryTag version 1.1.0 number of keys 4  
-  - key 1024 value_offset 1 - GTModelTypeGeoKey: ModelTypeProjected  
-  - key 3072 value_offset 32123 - ProjectedCSTypeGeoKey: PCS_NAD83_Ohio_South  
-  - key 3076 value_offset 9002 - ProjLinearUnitsGeoKey: Linear_Foot  
-  - key 4099 value_offset 9002 - VerticalUnitsGeoKey: Linear_Foot  
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -hillshade
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -hillshade -light 0 0 1
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -gray
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -false
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -set_min_max 46.83 90 -gray 
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -v -set_min_max 46.83 90 -false 
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -intensity -set_min_max 0 1000 -gray 
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -utm 17T -intensity -set_min_max 0 1000 -false
 
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -v -hillshade -nrows 200 -ncols 100
+    las2dem_new64 -i ..\data\TO_core_last_zoom.laz -o dem.png -v -hillshade -nrows 200 -ncols 100 -ll 630300 4834550
 
-    las2las64 -i s1885565.laz -o out.laz -sp83 OH_S -feet -elevation_feet -target_utm auto
 
-Reprojects the points from the Ohio_South NAD83 state plane with all units
-in feet to NAD83 UTM coordinates with all units in meter and sets these four
-geokeys as the projection information:
+    las2dem_new64 -i *.las -oasc
 
-  GeoKeyDirectoryTag version 1.1.0 number of keys 4  
-  - key 1024 value_offset 1 - GTModelTypeGeoKey: ModelTypeProjected  
-  - key 3072 value_offset 26917 - ProjectedCSTypeGeoKey: PCS_NAD83_UTM_zone_17N  
-  - key 3076 value_offset 9001 - ProjLinearUnitsGeoKey: Linear_Meter  
-  - key 4099 value_offset 9001 - VerticalUnitsGeoKey: Linear_Meter  
-
-
-    las2las64 -i s1885565.laz -o out.laz -sp83 OH_S -feet -elevation_feet -target_longlat
-
-Reprojects the points from the Ohio_South NAD83 state plane with all units
-in feet to geographic coordinates with x being longitude and y latitude and
-sets these three geokeys as the projection information:
-
-  GeoKeyDirectoryTag version 1.1.0 number of keys 3  
-  - key 1024 value_offset 2 - GTModelTypeGeoKey: ModelTypeGeographic  
-  - key 2048 value_offset 4269 - GeographicTypeGeoKey: GCS_NAD83  
-  - key 4099 value_offset 9001 - VerticalUnitsGeoKey: Linear_Meter  
-
-
-    las2las64 -i s1885565.laz -o out.laz -sp83 OH_S -feet -elevation_feet -target_sp83 OH_N -target_survey_feet -target_elevation_survey_feet 
-    las2las64 -i TO_core_last_zoom.laz -o out.laz -utm 17T
-    las2las64 -i TO_core_last_zoom.laz -o out.laz -utm 17T -target_latlong
-
-other variations of adding / changing projection information.
-
-
-    las2las64 -i *.laz -last_only
-
-processes all LAS files that match *.laz and stores only the last returns
-to a corresponding LAS file called *_1.laz (an added '_1' in the name).
-
-
-    las2las64 -i *.laz -olaz -keep_tile 630000 4830000 10000
-
-keeps a 10000 by 10000 tile with a lower left coordinate of x=630000
-and y=4830000 out of all LAS files that match *.laz and stores each as a
-compressed LAZ file *_1.laz (an added '_1' in the name).
-
-
-    las2las64 -i *.txt -iparse xyztiarn -keep_scan_angle -15 15
-
-processes all ASCII files that match *.txt, parses them with "xyztiarn",
-keeps all points whose scan angle is between -15 and 15, and stores them
-to a corresponding LAS file called *_1.laz (an added '_1' in the name).
-
-
-    las2las64 -i in.laz -o out.laz -keep_xy 630250 4834500 630500 4834750
-
-keeps only points of in.laz whose double-precision coordinates fall inside
-the rectangle (630250,4834500) to (630500,4834750) and stores these points 
-to out.laz.
-
-
-    las2las64 -lof file_list.txt -merged -o out.laz -keep_circle 630000 4850000 100
-
-keeps only those points from all files listed in the list of files file_list.txt
-whose double-precision coordinates fall into the circle centered at 630000 4850000
-with radius 100 and stores these points compressed to out.laz.
-
-
-    las2las64 -i in.laz -o out.laz -keep_z 10 100
-
-keeps points of in.laz whose double-precision elevations falls inside the
-range 10 to 100 and stores these points to out.laz.
-
-
-    las2las64 -i in.laz -o out.laz -drop_return 1
-
-drops all points of in.laz that are designated first returns by
-the value in their return_number field and stores surviving points
-compressed to out.laz.
-
-
-    las2las64 -i in.laz -o out.laz -drop_scan_angle_above 15
-
-drops all points of compressed in.laz whose scan angle is above 15 or
-below -15 and stores surviving points compressed to out.laz.
-
-
-    las2las64 -i in.laz -o out.laz -drop_intensity_below 1000 -remove_padding
-
-drops all points of in.laz whose intensity is below 1000 and stores
-surviving points to out.laz. In addition any additional user data after
-the LAS header or after the VLR block are stripped from the file.
-
-
-    las2las64 -i in.laz -o out.laz -last_only
-
-extracts all last return points from compressed in.laz and stores them
-compressed to out.laz.
-
-
-    las2las64 -i in.laz -o out.laz -scale_rgb_up
-
-multiplies all rgb values in the file with 256. this is used to scale
-the rgb values from standard unsigned char range (0 ... 255) to the
-unsigned short range (0 ... 65535) used in the LAS format.
-
-
-    las2las64 -i in.laz -o out.laz -scale_rgb_down
-
-does the opposite with compressed input and output files
-
-
-    las2las64 -i in.laz -o out.laz -subseq 1000 2000
-
-extracts a subsequence of points by skipping the first 1000 points and
-then collecting points until 2000 points were read.
-
-
-    las2las64 -i in.laz -o out.laz -keep_class 2 -keep_class 3
-
-extracts all points classfied as 2 or 3 from in.laz and stores
-them to out.laz.
-
-
-    las2las64 -i in.laz -o out.laz -keep_XY 63025000 483450000 63050000 483475000
-
-similar to '-keep_xy' (lowercase!) but uses the integer values point.X and point.Y
-that the points are stored with for the checks (and not the double precision 
-floating point coordinates they represent). Drops all the points of in.laz that 
-have point.X<63025000 or point.Y<483450000 or point.X>63050000 or point.Y>483475000 
-and stores surviving points to out.laz (use lasinfo.exe to see the range of 
-point.Z and point.Y).
-
-
-    las2las64 -i in.laz -o out.laz -keep_Z 1000 4000
-
-similar to '-keep_z' (lowercase!) but uses the integer values point.Z that the
-points are stored with for the checks (and not the double-precision floating 
-point coordinates they represent). Drops all the points of in.laz that have 
-point.Z<1000 or point.Z>4000 and stores all surviving points to out.laz 
-(use lasinfo.exe to see the range of point.Z).
-
-### Further examples
-
-    las2las64 -h
-    las2las64 -i *.las -utm 13N
-    las2las64 -i *.laz -first_only -olaz
-    las2las64 -i *.las -drop_return 4 5 -olaz
-    las2las64 -latlong -target_utm 12T -i in.las -o out.las
-    las2las64 -i in.laz -target_epsg 2972 -o out.laz
-    las2las64 -set_point_type 0 -lof file_list.txt -merged -o out.las
-    las2las64 -remove_vlr 2 -scale_rgb_up -i in.las -o out.las
-    las2las64 -i in.las -keep_xy 630000 4834500 630500 4835000 -keep_z 10 100 -o out.las
-    las2las64 -i in.txt -iparse xyzit -keep_circle 630200 4834750 100 -oparse xyzit -o out.txt
-    las2las64 -i in.laz -remove_padding -keep_scan_angle -15 15 -o out.laz
-    las2las64 -i in.laz -rescale 0.01 0.01 0.01 -reoffset 0 300000 0 -o out.laz
-    las2las64 -i in.laz -set_version 1.2 -keep_gpstime 46.5 47.5 -o out.laz
-    las2las64 -i in.laz -drop_intensity_below 10 -olaz -stdout > out.laz
-    las2las64 -i in.laz -last_only -drop_gpstime_below 46.75 -otxt -oparse xyzt -stdout > out.txt
-    las2las64 -i in.laz -remove_all_vlrs -keep_class 2 3 4 -olas -stdout > out.laz
-
-## las2las specific arguments
-
--add_attribute [m] [n] [o] [p] [q] [t]: adds a new "extra_byte" attribute of data_type [m] name [n] description [o]; optional: scale[p] offset [q] no_data_value [t]  
--add_empty_vlr [m] [n] [o]          : add an empty VLR with user-id [m], record-id [n] and description [o]  
--adjusted_or_offset_to_adjusted     : converts time stamps from either Adjusted Standard GPS or Offset GPS time to Adjusted Standard GPS  
--adjusted_or_offset_to_offset [n]   : converts time stamps from either Adjusted Standard GPS or Offset GPS time to Offset GPS [n]  
--adjusted_or_offset_to_week         : converts time stamps from either Adjusted Standard GPS or Offset GPS time to GPS week  
--adjusted_to_week                   : converts time stamps from Adjusted Standard GPS to GPS week  
--adjusted_to_offset [n]             : converts time stamps from Adjusted Standard GPS to Offset GPS [n]  
--crop_to_bb                         : removes points that falls outsize the bounding box specified in the LAS header  
--crop_to_bounding_box               : removes points that falls outsize the bounding box specified in the LAS header  
--dont_remove_empty_files            : do not remove files that have zero points remaining from disk  
--elevation_feet                     : use feet for elevation  
--feet                               : use feet  
--force                              : force a GPS conversion even if conversion is suspect  
--load_vlrs                          : loads all VLRs from a file called vlrs.vlr and adds them to each processed file  
--load_vlr [i] [u] [r] [f]           : loads a single VLR specified by index [i] (default = 0) or user ID [u] and record ID [r] from the file [f] (default: save.vlr) and adds it to each processed file header  
--load_ogc_wkt [f]                   : loads the first single-string from file [f] and puts it into the place of the OGC WKT  
--move_evlrs_to_vlrs                 : move all EVLRs with small enough payload to VLR section  
--offset_to_adjusted                 : converts time stamps from Offset GPS to Adjusted Standard GPS  
--offset_to_offset [n]               : converts time stamps from Offset GPS to Offset GPS [n]  
--offset_to_week                     : converts time stamps from Offset GPS to GPS week  
--remove_all_evlrs                   : remove all EVLRs  
--remove_all_vlrs                    : remove all VLRs  
--remove_evlr [n]                    : remove EVLR with index [n]{0=first}  
--remove_evlrs_from_to [m] [n]       : remove EVLRs with index [m] to [n]{0=first}  
--remove_original_vlr                : removes VLR containing original header information created by on-the-fly buffering  
--remove_padding                     : remove user-defined bytes before and after the header  
--remove_tiling_vlr                  : removes VLR containing tiling information created by lastile  
--remove_vlr [n]                     : remove VLR with index [n]{0=first}  
--remove_vlrs_from_to [m] [n]        : remove VLRs with index [m] to [n]{0=first}  
--reoffset [x] [y] [z]               : puts a new offset [x] [y] [z] into the header and translates the points accordingly  
--rescale [x] [y] [z]                : puts a new scale [x] [y] [z] into the header and rescales the points accordingly  
--save_vlrs                          : saves all VLRs to a file called vlrs.vlr so they can be loaded into another file  
--save_vlr [i] [u] [r] [f]           : saves a single VLR specified by index [i] (default = 0) or user ID [u] and record ID [r] to the file [f] (default: save.vlr) so it can be loaded into another file header  
--set_attribute_offset [m] [n]       : set offset of the attribute [m]{0-based} in the extra bytes to [n]  
--set_attribute_scale [m] [n]        : set scale of the attribute [m]{0-based} in the extra bytes to [n]  
--set_classification [n]             : set classification to [n]  
--set_global_encoding_gps_bit [n]    : sets bit in global encoding field specifying Adjusted GPS Standard time stamps  
--set_lastiling_buffer_flag [0/1]    : sets buffer flag in LAStiling VLR (if it exists) to [0/1]  
--set_ogc_wkt [n]                    : translate GeoTIFF keys [n] into CRS string in OGC WKT format and add it as VLR  
--set_ogc_wkt_in_evlr [n]            : same as "set_ogc_wkt" but adds [n] as LAS 1.4 EVLR instead. Really not recommended!!!  
--set_proj_wkt [n]                   : translate GeoTIFF keys [n] into CRS string in OGC WKT1 format using the proj lib format and add it as VLR  
--set_proj_wkt_in_evlr [n]           : same as "set_ogc_wkt" but adds [n] as LAS 1.4 EVLR instead. Really not recommended!!!  
--set_point_data_format [n]          : force point type to be [n]{1-10}  
--set_point_data_record_length [n]   : CAREFUL! sets the point data record length field of the LAS header to size [n] without checking whether this will corrupt the file  
--set_point_size [n]                 : force point size to be [n]  
--set_point_type [n]                 : force point type to be [n]{1-10}  
--set_time_offset [n]                : set time offset to [n] and set both the global encoding time offset bit and the global encoding gps bit, without converting the timestamps  
--set_version 1.2                    : set LAS version number to 1.2  
--set_version_major 1                : set LAS major version number to 1  
--set_version_minor 2                : set LAS minor version number to 2  
--start_at_point [n]                 : skips all points until point number [n]  
--stop_at_point [n]                  : omits all points after point number [n]  
--subseq [m] [n]                     : extract a subsequence, start from [m] using [n] points  
--switch_G_B                         : switch green and blue value  
--unset_attribute_offset [n]         : unsets the offset of attribute [n]{0=first} in the extra bytes  
--unset_attribute_scale [n]          : unsets the scale of attribute [n]{0=first} in the extra bytes  
--week_to_adjusted [n]               : converts time stamps from GPS week [n] to Adjusted Standard GPS  
--week_to_offset [m] [n]             : converts time stamps from GPS week [m] Offset GPS to Adjusted Standard GPS [n]  
+rasters the elevations of all LAS files *.las with step size 1 and
+stores the resulting DEM in ASC format.
+
+    las2dem_new64 -i *.laz -opng -utm 17T -step 2.5 -hillshade
+
+rasters the hillside-shaded elevations of all LAZ files *.laz with
+step size 2.5 and stores the resulting DEM in PNG format and with
+it a KML file that geo-references each PNG in GE with UTM zone 17T.
+
+    las2dem_new64 -i *.txt -iparse xyzi -obil -step 2 -intensity
+
+rasters the intensities of all ASCII files *.txt with step size 2
+and stores the resulting DEM in BIL format with 16 bit precision.
+
+    las2dem_new64 -i lidar.las -o dem.asc -step 2
+
+creates a temporary TIN from all points in the LAS file 'lidar.las',
+rasters the elevation values of each TIN facet onto a grid with step
+size 2, and stores the resulting DEM in ASC format.
+
+    las2dem_new64 -i lidar.txt -iparse ssxysi-o dem.bil -step 0.5 -intensity
+
+creates a temporary TIN from all points in the ASCII file 'lidar.txt'
+using the 3rd and 4th line entry as the x and y coordinate and the 5th
+as the intensity, rasters the intensity values of each TIN facet onto
+a grid with step size 0.5, and stores the resulting DEM in BIL format
+with 16 bit precision.
+
+    las2dem_new64 -lof lidar_files.txt -merged -o dem.bil -last_only
+
+creates a temporary TIN from all last returns of all files listed in
+the text file 'lidar_files.txt', rasters the elevation values of
+each TIN facet onto a grid with step size 1 and stores the resulting
+DEM in BIL format with 32 bit floating-point precision.
+
+    las2dem_new64 -i lidar.las lidar2.las lidar3.las -merged -hillshade -o dem.png -step 5 -keep_class 2
+
+creates a temporary TIN from the merged ground points (i.e. points
+with classification 2) of the 3 LAS files 'lidar1.las', 'lidar2.las',
+and 'lidar3.las', rasters hillside-shaded TIN facets onto a grid with
+step size 5, and stores the resulting grid in PNG format with 8 bit
+per pixel.
+
+    las2dem_new64 -i lidar1.txt -i lidar2.txt -iparse xyz -o dem.jpg -hillshade -last_only
+
+creates a temporary TIN from the last returns of the two ASCII files
+'lidar1.txt' and 'lidar2.txt' using the 1st, 2nd, and 3rd, entry on
+each line as the x, y, and z coordinate, rasters hillside-shaded TIN
+facets onto a grid with step size 5, and stores the resulting grid
+in JPG format with 8 bit per pixel.
+
+    las2dem_new64 -i lidar.las -o dem.tif -first_only -gray -step 2
+
+creates a temporary TIN from all first returns in the LAS file
+'lidar.las', rasters the elevation values of each TIN facet with
+gray-scale elevation coloring onto a grid with step size 2, and
+stores the resulting grid in TIF format with 8 bit per pixel.
+
+    las2dem_new64 -i lidar.las -o dem.png -first_only -false -step 2 -utm 14T
+
+same as above but with false elevation coloring and output of a KML
+file that georeferences the PNG file in Google Earth
+
+
+Try the following commands for generating some interesting georeferenced
+DEMs that you can look at in Google Earth by double clicking the automatically
+generated KML file:
+
+    las2dem_new64 -i ..\data\test.las -false -intensity -o test.png
+    las2dem_new64 -i ..\data\TO_core_last_zoom.las -hillshade -o toronto.png -utm 17T
+    las2dem_new64 -i ..\data\SerpentMound.las -hillshade -o SerpentMound.png
+
+
+## las2dem_new specific arguments
+
+### rasterization
+-elevation                 : use elevation as values (default)  
+-hillshade                 : color the image with hillside shading  
+-false                     : false-color based on elevation/intensity (used with PNG/TIF/JPG)  
+-gray                      : gray-scale based on elevation/intensity (used with PNG/TIF/JPG)  
+-grey                      : gray-scale based on elevation/intensity (used with PNG/TIF/JPG)  
+-rgb                       : use rgb values if available (only used with PNG/TIF/JPG)  
+-intensity                 : use intensity values  
+-slope                     : use slope as output color parameter  
+-attribute [n]             : use attribute [n] value as output color parameter  
+
+### others
+-buffer [n]                : increase tile by a bounding box of size [n]  
+-compute_min_max           : computes the range for -gray and -false  
+-copy_attribute_into_z [n] : copy attribute [n] value into z  
+-creeks [fns]              : integrate hard breaklines listed in file [fns]{.shp or .txt}  
+-edge_longest              : rasterize the length of the longest edge around every vertex  
+-edge_shortest             : rasterize the length of the shortest edge around every vertex  
+-elevation_feet            : use feet for elevation  
+-extra_pass                : do extra read pass to count points (only makes sense when filtering)  
+-feet                      : use feet  
+-float_precision [n]       : sets output float precision to [n]{used with ASC/BIL/TIF}  
+-force_precision           : force excessive elevation (z) precision  
+-grid [n]                  : raster with stepsize [n] (the default is 1 or 0.0001 on long/lat coordinates)  
+-grid_center               : aligns the grid's origin to the center of a cell instead of its corner  
+-ilay [n]                  : apply [n] or all LASlayers found in corresponding *.lay file on read  
+-ilaydir [n]               : look for corresponding *.lay file in directory [n]  
+-invert_ramp               : invert color ramp for output  
+-kill [n]                  : do not raster triangles with edges longer than [n] meters  
+-lakes [fns]               : respect lines in given shape or text file [fns]{closed polygons with elevations}  
+-light [x] [y] [z]         : change the direction of the light vector to [x] [y] [z] for hillside shading  
+-ll [x] [y]                : start rastering at these lower left [x] and [y] coordinates  
+-nbits [n]                 : use [n] bits to represent the elevation (mainly used with BIL format)  
+-ncols [n]                 : raster at most [n] columns  
+-nodata [n]                : use [n] as the nodata value in the BIL/ASC format  
+-nrows [n]                 : raster at most [n] rows  
+-oobj                      : output as OBJ file  
+-pit_free                  : run spike-free algorithm with defaults freeze = 1.5, interval = 0.25, buffer = 0.5  
+-reversed                  : run spike-free in reverse (from bottom to top)  
+-scale [n]                 : multiply all elevation/intensity values by [n] before rastering  
+-set_min_max               : sets min & max range for -gray and -false  
+-smooth [n]                : do [n] smooth iterations (typical 2..20; default=0)  
+-smooth_short [m] [n]      : smooth "elevation" or "intensity" values by [m] passes and edge length > [n]  
+-spike_free                : run spike-free algorithm with defaults freeze = 1.5, interval = 0.25, buffer = 0.5  
+-spike_free [m] [n] [o]    : run spike-free algorithm with freeze = [m], interval = [n], buffer = [o]  
+-step [n]                  : raster with stepsize [n] (the default is 1 or 0.0001 on long/lat coordinates)  
+-tin                       : write output.shp TIN for lake breakline (require -lakes argument)  
+-trim_upper_right          : trim upper right corner to one quantization unit  
+-use_orig_bb               : raster tile without buffer added by on-the-fly buffering  
+-use_tile_bb               : raster tile without buffer added by lastile  
+-week_to_adjusted [n]      : converts time stamps from GPS week [n] to Adjusted Standard GPS  
 
 ### Basics
 -cores [n]      : process multiple inputs on [n] cores in parallel  
+-license        : show license information  
+-demo           : use LAStools in demo mode (64bit only)  
+-fail           : fail if license expired or invalid (default for 64bit)  
 -h, -help       : print help output  
 -v, -verbose    : verbose output (print extra information)  
 -vv             : very verbose output (print even more information)  
@@ -336,10 +248,13 @@ point.Z<1000 or point.Z>4000 and stores all surviving points to out.laz
 ## Module arguments
 
 ### General
--chunk_size [n]    : set chunk size [n] in number of bytes  
 -comma_not_point   : use comma instead of point as decimal separator  
 -neighbors [n]     : set neighbors filename or wildcard [n]  
 -neighbors_lof [n] : set neighbors list of files [fnf]  
+-no_data [n]       : use [n] as the nodata value in the BIL / ASC / TIF format  
+-no_data_alpha     : adds an alpha channel to the GeoTIFF output, designating areas with no data as transparent  
+-no_kml            : avoids auto-creation of KML wrapper  
+-no_world_file     : avoid world-file for PNG, JPG, TIF and BIL output  
 -stored            : use in memory reader  
 
 ### Color
@@ -380,7 +295,6 @@ point.Z<1000 or point.Z>4000 and stores all surviving points to out.laz
 -keep_RGB_nir [m] [n]               : keep points with RGB NIR values between [min] [max]  
 -keep_RGB_red [min] [max]           : keep points with red color value between [min] and [max]  
 -map_attribute_into_RGB [a] [fnm]   : map attribute [a] by table in file [fnm] to RGB values  
--oscale_rgb [n]                     : scale output RGB by [n]  
 -scale_NIR [n]                      : scale NearInfraRed value by factor [n]  
 -scale_NIR_down                     : scale NearInfraRed value down by 256  
 -scale_NIR_to_16bit                 : scale 8 bit NearInfraRed value to 16 bit  
@@ -396,6 +310,7 @@ point.Z<1000 or point.Z>4000 and stores all surviving points to out.laz
 -set_NIR [n]                        : set NearInfraRed value to [n]  
 -set_RGB [r] [g] [b]                : set color to [r] [g] [b]  
 -set_RGB_of_class [c] [r] [g] [b]   : set RGB values of class [c] to [r][g][b] (8 or 16 bit)  
+-switch_G_B                         : switch green and blue value  
 -switch_RGBI_into_CIR               : set R to NIR; G to R; B to G  
 -switch_RGB_intensity_into_CIR      : set R to intensity; G to R; B to G  
 -switch_R_B                         : switch red and blue color value  
@@ -415,7 +330,6 @@ point.Z<1000 or point.Z>4000 and stores all surviving points to out.laz
 -classify_z_between_as [m] [n] [o]  : for z value between [m] and [n] set class to [o]  
 -copy_attribute_into_x [n]          : copy attribute [n] value into x  
 -copy_attribute_into_y [n]          : copy attribute [n] value into y  
--copy_attribute_into_z [n]          : copy attribute [n] value into z  
 -copy_intensity_into_z              : copy intensity to z value  
 -copy_register_into_x [n]           : copy register [n] to x value  
 -copy_register_into_y [n]           : copy register [n] to y value  
@@ -448,6 +362,8 @@ point.Z<1000 or point.Z>4000 and stores all surviving points to out.laz
 -keep_z_above [n]                   : keep points with z value above [n]  
 -keep_z_below [n]                   : keep points with z value below [n]  
 -offset_adjust                      : adjusting the offset based on the results of point operations and transformations  
+-reoffset [x] [y] [z]               : puts a new offset [x] [y] [z] into the header and translates the points accordingly  
+-rescale [x] [y] [z]                : puts a new scale [x] [y] [z] into the header and rescales the points accordingly  
 -rescale_xy [x] [y]                 : rescale x y by [x] [y]  
 -rescale_z [z]                      : rescale z by [z]  
 -rotate_xy [a] [x] [y]              : rotate points by [a] degrees, center at [x] [y]  
@@ -630,6 +546,7 @@ point.Z<1000 or point.Z>4000 and stores all surviving points to out.laz
 -keep_extended_classification [n]   : keep points with extended class [n]  
 -move_ancient_to_extended_classification: move old data to extended classification  
 -set_RGB_of_class [c] [r] [g] [b]   : set RGB values of class [c] to [r][g][b] (8 or 16 bit)  
+-set_classification [n]             : set classification to [n]  
 -set_extended_classification [n]    : set extended classification to [n]  
 
 ### Extra byte
@@ -650,7 +567,6 @@ point.Z<1000 or point.Z>4000 and stores all surviving points to out.laz
 -copy_attribute_into_user_data [n]  : copy attribute [n] value into user data field  
 -copy_attribute_into_x [n]          : copy attribute [n] value into x  
 -copy_attribute_into_y [n]          : copy attribute [n] value into y  
--copy_attribute_into_z [n]          : copy attribute [n] value into z  
 -copy_intensity_into_attribute [n]  : copy intensity to attribute [n] value  
 -copy_register_into_attribute [m] [n]: copy register [m] to attribute [n] value  
 -copy_user_data_into_attribute [n]  : copy user data into attribute [n] value  
@@ -689,25 +605,26 @@ point.Z<1000 or point.Z>4000 and stores all surviving points to out.laz
 -set_synthetic_flag [0/1]        : set synthetic flag to [0/1]  
 -set_withheld_flag [0/1]         : set withheld flag to [0/1]  
 
-### GPS time 
+### GPS time
+-adjusted_to_week                   : converts time stamps from Adjusted Standard GPS to GPS week  
 -bin_gps_time_into_intensity [n]    : set intensity time to gps/[n]  
 -bin_gps_time_into_point_source [n] : set point source to gps/[n]  
--drop_gps_time_above [n]            : drop points with GPS time above [n], offset times are translated to adjusted gps times
--drop_gps_time_below [n]            : drop points with GPS time below [n], offset times are translated to adjusted gps times
--drop_gps_time_between [m] [n]      : drop points with GPS time between [m] and [n], offset times are translated to adjusted gps times
--drop_gpstime_above [n]             : drop points with GPS time above [n], offset times are translated to adjusted gps times  
--drop_gpstime_below [n]             : drop points with GPS time below [n], offset times are translated to adjusted gps times  
--drop_gpstime_between [m] [n]       : drop points with GPS time between [m] and [n], offset times are translated to adjusted gps times  
--keep_gps_time [m] [n]              : keep points with GPS time between [m] and [n], offset times are translated to adjusted gps times  
--keep_gps_time_above [n]            : keep points with GPS time above [n], offset times are translated to adjusted gps times  
--keep_gps_time_below [n]            : keep points with GPS time below [n], offset times are translated to adjusted gps times  
--keep_gps_time_between [m] [n]      : keep points with GPS time between [m] and [n], offset times are translated to adjusted gps times  
--keep_gpstime [m] [n]               : keep points with GPS time between [m] and [n], offset times are translated to adjusted gps times  
--keep_gpstime_above [n]             : keep points with GPS time above [n], offset times are translated to adjusted gps times 
--keep_gpstime_below [n]             : keep points with GPS time below [n], offset times are translated to adjusted gps times  
--keep_gpstime_between [m] [n]       : keep points with GPS time between [m] and [n], offset times are translated to adjusted gps times  
+-drop_gps_time_above [n]            : drop points with GPS time above [n]  
+-drop_gps_time_below [n]            : drop points with GPS time below [n]  
+-drop_gps_time_between [m] [n]      : drop points with GPS time between [m] and [n]  
+-drop_gpstime_above [n]             : drop points with GPS time above [n]  
+-drop_gpstime_below [n]             : drop points with GPS time below [n]  
+-drop_gpstime_between [m] [n]       : drop points with GPS time between [m] and [n]  
+-keep_gps_time [m] [n]              : keep points with GPS time between [m] and [n]  
+-keep_gps_time_above [n]            : keep points with GPS time above [n]  
+-keep_gps_time_below [n]            : keep points with GPS time below [n]  
+-keep_gps_time_between [m] [n]      : keep points with GPS time between [m] and [n]  
+-keep_gpstime [m] [n]               : keep points with GPS time between [m] and [n]  
+-keep_gpstime_above [n]             : keep points with GPS time above [n]  
+-keep_gpstime_below [n]             : keep points with GPS time below [n]  
+-keep_gpstime_between [m] [n]       : keep points with GPS time between [m] and [n]  
 -set_gps_time [n]                   : set gps time to [n]  
--translate_gps_time [n]             : translate GPS time by [n] 
+-translate_gps_time [n]             : translate GPS time by [n]  
 
 ### Intensity
 -bin_gps_time_into_intensity [n]    : set intensity time to gps/[n]  
@@ -740,10 +657,6 @@ point.Z<1000 or point.Z>4000 and stores all surviving points to out.laz
 -keep_intensity_above [n]           : keep points with intensity value above [n]  
 -keep_intensity_below [n]           : keep points with intensity value below [n]  
 -map_intensity [fnm]                : set the intensity by map in file [fnm]  
--multiply_scaled_intensity_into_RGB [n] : calculate gray color by (intensity(rel)/intensity(range))*[n]  
--multiply_scaled_intensity_into_RGB_red : set red color to [n]*intensity  
--multiply_scaled_intensity_into_RGB_green : set green color to [n]*intensity  
--multiply_scaled_intensity_into_RGB_blue : set blue color to [n]*intensity  
 -scale_intensity [n]                : multiply intensity by [n]  
 -set_intensity [n]                  : set intensity to [n]  
 -switch_RGB_intensity_into_CIR      : set R to intensity; G to R; B to G  
@@ -805,6 +718,8 @@ point.Z<1000 or point.Z>4000 and stores all surviving points to out.laz
 
 ### Tiles
 -keep_tile [x] [y] [size] : keep tile at lower-left [x] [y] with size [s]  
+-tiles_ns [m] [n]         : create a tiling of DEMs with name [m] with tiles of size [n]  
+-tiling_ns crater 500     : create a tiling of DEMs named 'crater' with tiles of size 500  
 
 ### Waveform packet
 -drop_wavepacket [n]     : drop points with wavepacket value of [n]  
@@ -834,10 +749,6 @@ point.Z<1000 or point.Z>4000 and stores all surviving points to out.laz
 -nad83_harn                         : use datum NAD83_HARN  
 -nad83_pa11                         : set horizontal datum to NAD83 PA11  
 -osgb1936                           : use datum OSGB 1936  
--proj_epsg [s] [t]           	    : (Recommended) uses the PROJ lib to perform a CRS transformation. Optionally, the source CRS [s] can be specified using EPSG code (deafult from the input file header). In addition, the target CRS [t] must be specified using EPSG code  
--proj_wkt [s] [t]           	    : (Recommended) uses the PROJ lib to perform a CRS transformation. Optionally, the source CRS [s] can be specified by using a file with the WKR representation of the CRS (deafult from the input file header). In addition, the target CRS [t] must be specified using a file with the WKR representation of the CRS  
--proj_string [s] [t]           	    : (For experienced users) uses the PROJ lib to perform a CRS transformation. Optionally, the source CRS [s] can be specified using PRO string (deafult from the input file header). In addition, the target CRS [t] must be specified using PROJ string. Furthermore a single PROJ string [s] can also be specified, which directly describes a transformation or operation  
--proj_json [s] [t]           	    : (For experienced users) uses the PROJ lib to perform a CRS transformation. Optionally, the source CRS [s] can be specified by using a file with the PROJJSON representation of the CRS (deafult from the input file header). In addition, the target CRS [t] must be specified using a file with the PROJJSON representation of the CRS  
 -sp27 SC_N                          : use the NAD27 South Carolina North state plane  
 -sp83 CO_S                          : use the NAD83 Colorado South state plane for georeferencing  
 -survey_feet                        : use survey feet  
@@ -889,9 +800,6 @@ point.Z<1000 or point.Z>4000 and stores all surviving points to out.laz
 
 ### Input
 -i [fnp]        : input file or input file mask [fnp] (e.g. *.laz;fo?.la?;esri.shp,...)  
-                  if a file mask contains spaces " " use:
-                    windows: -i "c:\this is space\*.laz"
-                    linux:   -i "c:\this is space"\*.laz"
 -io_ibuffer [n] : use read-input-buffer of size [n] bytes  
 -iparse [xyz]   : define fields [xyz] for text input parser  
 -ipts           : input as PTS (plain text lidar source), store header in VLR  
@@ -906,49 +814,35 @@ point.Z<1000 or point.Z>4000 and stores all surviving points to out.laz
 -stdin          : pipe from stdin  
 
 ### Output
--compatible      : write LAS/LAZ output in compatibility mode  
--do_not_populate : do not populate header on output  
--io_obuffer [n]  : use write-out-buffer of size [n] bytes  
--native          : write LAS/LAZ output in native/actual mode  
--nil             : pipe output to NULL (suppress output)  
--o [n]           : use [n] as output file  
--obin            : output as BIN (terrasolid binary)  
--ocut [n]        : cut the last [n] characters from name  
--odir [n]        : set output directory to [n]  
--odix [n]        : set output file name suffix to [n]  
--oforce          : force output creation also on errors or warnings  
--olas            : output as LAS file  
--olaz            : output as LAZ (compressed LAS)  
--oparse [xyz]    : parse on-the-fly to ASCII using fields [xyz]  
--opts            : output as PTS (plain text lidar data)  
--optx            : output as PTX (plain text with header)  
--oqi             : output in QFIT format (.qi)(ATM project, NASA)  
--oscale_rgb [n]  : scale output RGB by [n]  
--osep [sep]      : set text output separator as [sep](see table below)  
--otxt            : output as textfile  
--owrl            : output as VRLM (Virtual Reality Modeling Language) text  
--pipe_on         : write output to command pipe, see also -std_in  
--populate        : populate header on output  
--stdout          : pipe to stdout  
--target_ecef     : output is geocentric (Earth-centered Earth-fixed)  
--temp_files [n]  : set base file name [n] for temp files (example: E:\tmp)  
+-compression_quality [n] : set compression quality to [n] for compressable image formats  
+-do_not_populate         : do not populate header on output  
+-nil                     : pipe output to NULL (suppress output)  
+-o [n]                   : use [n] as output file  
+-oasc                    : output as ascii file  
+-obil                    : output as bil (Band Interleaved by Line)  
+-ocsv                    : output as CSV (comma separated value)  
+-ocut [n]                : cut the last [n] characters from name  
+-odir [n]                : set output directory to [n]  
+-odix [n]                : set output file name suffix to [n]  
+-odtm                    : output as dtm (Digital Terrain Models)  
+-oflt                    : output as flt (Float file format)  
+-oforce                  : force output creation also on errors or warnings  
+-oimg                    : output as img (Image file) (Win32 only)  
+-ojpg                    : output as jpg (JPG image)  
+-olaz                    : output as LAZ (compressed LAS)  
+-opng                    : output as png (PNG image)  
+-osep [n]                : set text output separator as [sep] (see below, only xyz)  
+-otif                    : output as GeoTIFF image  
+-oxyz                    : output as xyz textfile  
+-force_tif               : force output in TIFF format, regardless of data size. Used in combination with GeoTIFF output  
+-force_bigTif            : force output in BigTIFF format, regardless of data size. Used in combination with GeoTIFF output  
+-pipe_on                 : write output to command pipe, see also -std_in  
+-populate                : populate header on output  
+-target_ecef             : output is geocentric (Earth-centered Earth-fixed)  
+-temp_files [n]          : set base file name [n] for temp files (example: E:\tmp)  
 
-### add_attribute
-The '-add_attribute' argument allow as first parameter the datatype
-out of this values:
-  0 : undocumented - extra bytes specify value in options field
-  1 : unsigned char (1 byte)
-  2 : char (1 byte)
-  3 : unsigned short (2 bytes)
-  4 : short (2 bytes)
-  5 : unsigned long (4 bytes)
-  6 : long (4 bytes)
-  7 : unsigned long long (8 bytes)
-  8 : long long (8 bytes)
-  9 : float (4 bytes)
-  10 : double (8 bytes)
-  11-30 : deprecated
-  31-255 : reserved
+### Basics
+-help : print help output  
 
 ### parse
 The '-parse [xyz]' flag specifies how to interpret each line of the ASCII file.
@@ -960,9 +854,6 @@ The other supported entries are:
   x : [x] coordinate  
   y : [y] coordinate  
   z : [z] coordinate  
-  X : unscaled raw [X] value  
-  Y : unscaled raw [Y] value  
-  Z : unscaled raw [Z] value  
   t : gps [t]ime  
   R : RGB [R]ed channel  
   G : RGB [G]reen channel  
@@ -978,62 +869,16 @@ The other supported entries are:
   g : synthetic fla[g]  
   o : [o]verlap flag of LAS 1.4 point types 6, 7, 8  
   l : scanner channe[l] of LAS 1.4 point types 6, 7, 8  
-  m : point index, starting at 0
-  M : point index, starting at 1
-  W : all wavepacket attributes
-  w : [w]avepacket descriptor index
-  c : [c]lassification. If extended classes are used: Use o,l or I to force 1.4 format.. If extended classes are used: Use o,l or I to force 1.4 format.
+  E : terrasolid [E]hco Encoding  
+  c : [c]lassification. If extended classes are used: Use o,l or I to force 1.4 format.  
   u : [u]ser data  
   p : [p]oint source ID  
   e : [e]dge of flight line flag  
   d : [d]irection of scan flag  
   0-9 : additional attributes described as extra bytes (0 through 9)  
-
-### column descriptions
-Possible column descriptions in the first line of a text input file (*.txt) 
-to generate the parse format.
-This descriptions can be also generated using las2txt with -coldesc argument.
-
-  Column description  Resulting parse character  
-  x                   x coordinate  
-  y                   y coordinate  
-  z                   z coordinate  
-  X                   X (unscaled raw X value)  
-  Y                   Y (unscaled raw Y value)  
-  Z                   Z (unscaled raw Z value)  
-  gps_time            t (gps time)  
-  intensity           i  
-  scan_angle          a  
-  point_source_id     p  
-  classification      c  
-  user_data           u  
-  return_number       r  
-  number_of_returns   n  
-  edge_of_flight_line e  
-  scan_direction_flag d  
-  withheld_flag       h  
-  keypoint_flag       k  
-  synthetic_flag      g  
-  skip                s (skip this column without warning)  
-  overlap_flag        o  
-  scanner_channel     l  
-  R                   R (RGB red)  
-  G                   G (RGB green)  
-  B                   B (RGB blue)  
-  HSV_H               (HSV) HSV color model hue [0..360]  
-  HSV_S                                     saturation [0..100]  
-  HSV_V                                     value [0..100]  
-  HSV_h               (hsv) HSV color model hue [0..1]  
-  HSV_s                                     saturation [0..1]  
-  HSV_v                                     value [0..1]   
-  HSL_H               (HSL) HSL color model hue [0..360]  
-  HSL_S                                     saturation [0..100]  
-  HSL_L                                     luminance [0..100]   
-  HSL_h               (hsl) HSL color model hue [0..1]  
-  HSL_s                                     saturation [0..1]  
-  HSL_l                                     luminance [0..1]
-  
-Other header descriptions will output a warning and the column will be skipped during import.
+  (13) : additional attributes described as extra bytes (10 and up)  
+  H : a hexadecimal string encoding the RGB color  
+  J : a hexadecimal string encoding the intensity  
 
 ### output separator
 The '-osep [sep]' argument specifies the output format of a text(xyz) output.
@@ -1049,7 +894,14 @@ Supported [sep] values:
 
 ## Licensing
 
-This tool is free to use.
+Info on licensing and pricing: https://rapidlasso.de/pricing/.
+If you have any questions or need assistance, email to info@rapidlasso.de.
+
+## Evaluation and demo mode
+
+Please use the "-demo" argument to run the tool in demo mode. For quality tests,
+use small files (< 1.5 million points). If you use larger files, the output will
+contain diagonal lines/output distortions due to the license protection.
 
 ## Support
 

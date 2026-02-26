@@ -436,9 +436,9 @@ BOOL LASwaveform13reader::has_samples_xyz()
   if (s_count < nsamples)
   {
     F32 dist = location - s_count*temporal;
-    XYZsample[0] = XYZreturn[0] + dist*XYZt[0];
-    XYZsample[1] = XYZreturn[1] + dist*XYZt[1];
-    XYZsample[2] = XYZreturn[2] + dist*XYZt[2];
+    XYZsample[0] = XYZreturn[0] + static_cast<F64>(dist)*XYZt[0];
+    XYZsample[1] = XYZreturn[1] + static_cast<F64>(dist)*XYZt[1];
+    XYZsample[2] = XYZreturn[2] + static_cast<F64>(dist)*XYZt[2];
     if (nbits == 8)
     {
       sample = samples[s_count];

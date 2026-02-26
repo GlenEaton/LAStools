@@ -1642,8 +1642,8 @@ BOOL LASreaderLASrescale::read_point_default()
 
 BOOL LASreaderLASrescale::open(ByteStreamIn* stream, BOOL peek_only, U32 decompress_selective)
 {
-  LASquantizer quantizer = header;
   if (!LASreaderLAS::open(stream, peek_only, decompress_selective)) return FALSE;
+  LASquantizer quantizer = header;
   // do we need to change anything
   rescale_x = rescale_y = rescale_z = FALSE;
   orig_x_scale_factor = header.x_scale_factor;

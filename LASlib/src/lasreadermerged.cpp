@@ -1278,8 +1278,8 @@ BOOL LASreaderMerged::inside_tile(const F32 ll_x, const F32 ll_y, const F32 size
   orig_max_y = header.max_y;
   header.min_x = ll_x;
   header.min_y = ll_y;
-  header.max_x = ll_x + size - 0.001f * header.x_scale_factor;
-  header.max_y = ll_y + size - 0.001f * header.y_scale_factor;
+  header.max_x = static_cast<F64>(ll_x) + static_cast<F64>(size) - 0.001f * header.x_scale_factor;
+  header.max_y = static_cast<F64>(ll_y) + static_cast<F64>(size) - 0.001f * header.y_scale_factor;
   return TRUE;
 }
 

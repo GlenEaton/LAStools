@@ -77,15 +77,15 @@ void LASoperation::write_transformed_values_with_adjust_offset(F64 x, F64 y, F64
   }
 
   if (I32_FITS_IN_RANGE(X))
-    point->set_X(X);
+    point->set_X(static_cast<I32>(X));
   else
     overflow++;
   if (I32_FITS_IN_RANGE(Y))
-    point->set_Y(Y);
+    point->set_Y(static_cast<I32>(Y));
   else
     overflow++;
   if (I32_FITS_IN_RANGE(Z))
-    point->set_Z(Z);
+    point->set_Z(static_cast<I32>(Z));
   else
     overflow++;
 }
@@ -4819,7 +4819,7 @@ class LASoperationConvertAdjustedGpsToWeek : public LASoperation
         if (week_float < 0) {
             week -= 1;
         }
-        I64 secs = week * 604800 - 1000000000;
+        I64 secs = static_cast<I64>(week) * 604800 - 1000000000;
         point->gps_time -= secs;
         if (point->gps_time == 604800.0) 
         {
@@ -5069,7 +5069,7 @@ public:
         if (week_float < 0) {
             week -= 1;
         }
-        I64 secs = week * 604800 - (I64)orig_time_offset * 1000 * 1000;
+        I64 secs = static_cast<I64>(week) * 604800 - (I64)orig_time_offset * 1000 * 1000;
         point->gps_time -= secs;
         if (point->gps_time == 604800.0)
         {
@@ -5163,7 +5163,7 @@ public:
         this->time_offset = time_offset;
         delta_secs = week;
         delta_secs *= 604800;
-        delta_secs -= 1000*1000*time_offset;
+        delta_secs -= 1000*1000*static_cast<I64>(time_offset);
     };
 
 private:
