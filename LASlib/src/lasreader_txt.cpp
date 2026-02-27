@@ -1678,25 +1678,43 @@ BOOL LASreaderTXT::parse_column_description(CHAR** parse_string)
       else if (strcmp(token, "X") == 0) auto_parse_string[i] = 'X';
       else if (strcmp(token, "Y") == 0) auto_parse_string[i] = 'Y';
       else if (strcmp(token, "Z") == 0) auto_parse_string[i] = 'Z';
-      else if (strcmp(token, "gps_time") == 0) auto_parse_string[i] = 't';
-      else if (strcmp(token, "intensity") == 0) auto_parse_string[i] = 'i';
-      else if (strcmp(token, "scan_angle") == 0) auto_parse_string[i] = 'a';
-      else if (strcmp(token, "point_source_id") == 0) auto_parse_string[i] = 'p';
-      else if (strcmp(token, "classification") == 0) auto_parse_string[i] = 'c';
-      else if (strcmp(token, "user_data") == 0) auto_parse_string[i] = 'u';
-      else if (strcmp(token, "return_number") == 0) auto_parse_string[i] = 'r';
-      else if (strcmp(token, "number_of_returns") == 0) auto_parse_string[i] = 'n';
-      else if (strcmp(token, "edge_of_flight_line") == 0)	auto_parse_string[i] = 'e';
-      else if (strcmp(token, "scan_direction_flag") == 0)	auto_parse_string[i] = 'd';
-      else if (strcmp(token, "withheld_flag") == 0) auto_parse_string[i] = 'h';
-      else if (strcmp(token, "keypoint_flag") == 0) auto_parse_string[i] = 'k';
-      else if (strcmp(token, "synthetic_flag") == 0) auto_parse_string[i] = 'g';
-      else if (strcmp(token, "skip") == 0) auto_parse_string[i] = 's';
-      else if (strcmp(token, "overlap_flag") == 0) auto_parse_string[i] = 'o';
-      else if (strcmp(token, "scanner_channel") == 0) auto_parse_string[i] = 'l';
-      else if (strcmp(token, "R") == 0) auto_parse_string[i] = 'R';
-      else if (strcmp(token, "G") == 0) auto_parse_string[i] = 'G';
-      else if (strcmp(token, "B") == 0) auto_parse_string[i] = 'B';
+      else if ((strcmp(token, "gps_time") == 0) || (strcmp(token, "t") == 0)) auto_parse_string[i] = 't';
+      else if ((strcmp(token, "intensity") == 0) || (strcmp(token, "i") == 0))
+        auto_parse_string[i] = 'i';
+      else if ((strcmp(token, "scan_angle") == 0) || (strcmp(token, "a") == 0))
+        auto_parse_string[i] = 'a';
+      else if ((strcmp(token, "point_source_id") == 0) || (strcmp(token, "p") == 0))
+        auto_parse_string[i] = 'p';
+      else if ((strcmp(token, "classification") == 0) || (strcmp(token, "c") == 0))
+        auto_parse_string[i] = 'c';
+      else if ((strcmp(token, "user_data") == 0) || (strcmp(token, "u") == 0))
+        auto_parse_string[i] = 'u';
+      else if ((strcmp(token, "return_number") == 0) || (strcmp(token, "r") == 0))
+        auto_parse_string[i] = 'r';
+      else if ((strcmp(token, "number_of_returns") == 0) || (strcmp(token, "n") == 0))
+        auto_parse_string[i] = 'n';
+      else if ((strcmp(token, "edge_of_flight_line") == 0) || (strcmp(token, "e") == 0))
+        auto_parse_string[i] = 'e';
+      else if ((strcmp(token, "scan_direction_flag") == 0) || (strcmp(token, "d") == 0))
+        auto_parse_string[i] = 'd';
+      else if ((strcmp(token, "withheld_flag") == 0) || (strcmp(token, "h") == 0))
+        auto_parse_string[i] = 'h';
+      else if ((strcmp(token, "keypoint_flag") == 0) || (strcmp(token, "k") == 0))
+        auto_parse_string[i] = 'k';
+      else if ((strcmp(token, "synthetic_flag") == 0) || (strcmp(token, "g") == 0))
+        auto_parse_string[i] = 'g';
+      else if ((strcmp(token, "skip") == 0) || (strcmp(token, "s") == 0))
+        auto_parse_string[i] = 's';
+      else if ((strcmp(token, "overlap_flag") == 0) || (strcmp(token, "o") == 0))
+        auto_parse_string[i] = 'o';
+      else if ((strcmp(token, "scanner_channel") == 0) || (strcmp(token, "l") == 0))
+        auto_parse_string[i] = 'l';
+      else if (strcmp(token, "R") == 0)
+        auto_parse_string[i] = 'R';
+      else if (strcmp(token, "G") == 0)
+        auto_parse_string[i] = 'G';
+      else if (strcmp(token, "B") == 0)
+        auto_parse_string[i] = 'B';
       else if (strcmp(token, "HSV_H") == 0)
       {
         memcpy(&auto_parse_string[i], "(HSV)", 5); i += 4;
