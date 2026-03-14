@@ -1,3 +1,5 @@
+8 December 2025 -- NEW: support for LAS 1.5
+21 July 2025 -- rename get/set_classification_uni to get/set_classification
 04 March 2024 -- LAStools merge: LASMessage concept; warnings fix; error handling
 20 October 2023 -- fix integer overflow of number_of_point_records when using laszip_update_inventory
 22 March 2022 -- fix fseek for gcc for las/lax file > 2Gb
