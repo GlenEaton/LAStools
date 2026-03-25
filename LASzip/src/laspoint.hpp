@@ -484,7 +484,7 @@ class LASLIB_DLL LASpoint {
   void clean() {
     zero();
 
-    if (extra_bytes && extra_bytes[0]!=0) {
+    if (extra_bytes) { // <--- The fixed check
       delete[] extra_bytes;
       extra_bytes = 0;
     };
