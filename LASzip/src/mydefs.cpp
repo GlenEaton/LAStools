@@ -41,6 +41,7 @@
 #include <string>
 #ifdef _WIN32
 #include <windows.h>
+#include <cctype> //needed for vs2017 to avoid std::tolower and std:toupper compile errors
 #else
 #include <unistd.h>
 #endif
@@ -133,7 +134,6 @@ bool validate_utf8(const char* str, bool restrict_to_two_bytes) noexcept {
   constexpr uint8_t UTF8_CONTINUATION_MASK = 0xC0;
   constexpr uint8_t UTF8_CONTINUATION_PREFIX = 0x80;
 
-  // bool has_two_byte = false;
   const auto* p = reinterpret_cast<const unsigned char*>(str);
 
   while (*p) {
@@ -145,12 +145,6 @@ bool validate_utf8(const char* str, bool restrict_to_two_bytes) noexcept {
       continue;
     }
 
-    // Detect standalone high bytes (0x80-0xFF), common in Windows-1252
-    if (c >= 0x80 && (c < 0xC2 || (c & UTF8_2BYTE_MASK) != UTF8_2BYTE_PREFIX) && (c & UTF8_3BYTE_MASK) != UTF8_3BYTE_PREFIX &&
-        (c & UTF8_4BYTE_MASK) != UTF8_4BYTE_PREFIX) {
-      return false;  // Invalid UTF-8 start byte, likely ANSI
-    }
-
     // 2-byte sequence (U+0080 - U+07FF)
     if ((c & UTF8_2BYTE_MASK) == UTF8_2BYTE_PREFIX) {
       if (c < 0xC2 || !p[1]) {
@@ -158,18 +152,8 @@ bool validate_utf8(const char* str, bool restrict_to_two_bytes) noexcept {
       }
       uint8_t c1 = p[1];
       if ((c1 & UTF8_CONTINUATION_MASK) != UTF8_CONTINUATION_PREFIX) {
-        // Check for ANSI-like second byte (0x40-0x7F), common in GBK/Shift-JIS
-        if (c1 >= 0x40 && c1 <= 0x7F) {
-          return false;  // Likely GBK or Shift-JIS, not UTF-8
-        }
         return false;  // Invalid continuation byte
       }
-      // Decode and check code point to exclude rare ranges
-      uint32_t code_point = ((c & 0x1F) << 6) | (c1 & 0x3F);
-      if (code_point < 0x80 || code_point > 0x7FF || (code_point >= 0x0080 && code_point <= 0x05FF)) {
-        return false;  // Invalid or rare code point, likely ANSI
-      }
-      // has_two_byte = true;
       p += 2;
       continue;
     }
@@ -861,6 +845,87 @@ I32 get_digits(F64 scale_factor) {
   }
   return -1;
 }
+
+
+/// Correctly encapsulates CSV special characters and doubles quotation marks for valid CSV
+std::string escape_csv_value(const std::string& value) {
+  // only escape if special " characters present
+  std::string escaped;
+  escaped.reserve(value.size());
+
+  for (char c : value) {
+    if (c == '"')
+      escaped += "\"\"";  // double quotation marks
+    else
+      escaped += c;
+  }
+  return escaped;
+}
+
+/// Converts all XML reserved characters in the string to their safe entity codes for valid XML
+std::string escape_xml_value(const std::string& value) {
+  std::string out;
+  out.reserve(value.size());
+
+  for (char c : value) {
+    switch (c) {
+      case '&':
+        out += "&amp;";
+        break;
+      case '<':
+        out += "&lt;";
+        break;
+      case '>':
+        out += "&gt;";
+        break;
+      default:
+        out += c;
+        break;
+    }
+  }
+  return out;
+}
+
+/// Compresses a sorted set of indices into readable ranges such as '3-7, 10-12, 20'.
+/// Consecutive values are grouped into ranges, whilst individual values are output separately.
+std::string compress_indices(const std::set<I32>& indices) {
+  if (indices.empty()) return "";
+
+  std::ostringstream oss;
+
+  std::set<I32>::const_iterator iter = indices.begin();
+  I32 range_start = *iter;
+  I32 previous_value = *iter;
+
+  ++iter;
+
+  for (; iter != indices.end(); ++iter) {
+    I32 current_value = *iter;
+
+    if (current_value == previous_value + 1) {
+      // Range continues
+      previous_value = current_value;
+    } else {
+      // Range ended, write it out
+      if (range_start == previous_value)
+        oss << range_start << ", ";
+      else
+        oss << range_start << "-" << previous_value << ", ";
+
+      range_start = previous_value = current_value;
+    }
+  }
+
+  // Last range
+  if (range_start == previous_value)
+    oss << range_start;
+  else
+    oss << range_start << "-" << previous_value;
+
+  return oss.str();
+}
+
+
 
 /// endians 
 namespace Endian {

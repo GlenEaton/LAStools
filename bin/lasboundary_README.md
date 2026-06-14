@@ -28,7 +28,7 @@ file it can be specified in the command line with '-utm 15T' or
 be one label per file (!!!) in the center of the bounding box.
 
 For both KML and SHP output you can put many outputs into one
-file with the '-overview' option. To have additional into about
+file with the '-overview' option. To have additional info about
 bounding box and number of points in each file add '-labels' in
 addition to the command line.
 
@@ -716,6 +716,7 @@ lasboundary64 -i lidar.las -keep_class 6 -convavity 1.5 -o building_footprints.s
 -iskip [n]      : skip [n] lines at the beginning of the text input  
 -itxt           : expect input as text file  
 -lof [fnf]      : use input out of a list of files [fnf]  
+-subdir         : enables recursive search in subdirectories. (Linux: enclose wildcard patterns like "*.laz" in quotes)  
 -unique         : remove duplicate files in a -lof list  
 -merged         : merge input files  
 -buffered [n]   : use on-the-fly buffering of size [n] for tiles without implicit buffer  

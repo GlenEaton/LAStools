@@ -121,7 +121,7 @@ class LASLIB_DLL LASpoint {
   U8 user_data;
   U16 point_source_ID;
 
-  // LAS 1.4 only
+  // >= LAS 1.4 only
   I16 extended_scan_angle;
   U8 extended_point_type           : 2;
   U8 extended_scanner_channel      : 2;
@@ -136,7 +136,7 @@ class LASLIB_DLL LASpoint {
   // for 8 byte alignment of the GPS time
   U8 dummy[2];
 
-  // compressed LASzip 1.4 points only
+  // compressed >= LASzip 1.4 points only
   BOOL gps_time_change;
 
   F64 gps_time;
@@ -309,6 +309,8 @@ class LASLIB_DLL LASpoint {
         case LASitem::POINT14:
           have_gps_time = TRUE;
           extended_point_type = 1;
+          this->point[i] = (U8*)this;
+          break;
         case LASitem::POINT10:
           this->point[i] = (U8*)&(this->X);
           break;
@@ -365,6 +367,8 @@ class LASLIB_DLL LASpoint {
         case LASitem::POINT14:
           have_gps_time = TRUE;
           extended_point_type = 1;
+          this->point[i] = (U8*)this;
+          break;
         case LASitem::POINT10:
           this->point[i] = (U8*)&(this->X);
           break;

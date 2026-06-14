@@ -52,12 +52,13 @@
 #ifndef LAS_DEFINITIONS_HPP
 #define LAS_DEFINITIONS_HPP
 
-#define LAS_TOOLS_VERSION 260228
+#define LAS_TOOLS_VERSION 260507
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <cassert>
+#include <functional>
 
 #include "mydefs.hpp"
 #include "lasvlr.hpp"
@@ -81,6 +82,8 @@
 #define LAS_TOOLS_FORMAT_FLT    11
 #define LAS_TOOLS_FORMAT_DTM    12
 #define LAS_TOOLS_FORMAT_JSON   13
+#define LAS_TOOLS_FORMAT_XML    14 
+#define LAS_TOOLS_FORMAT_CSV    15 
 
 #define LAS_TOOLS_GLOBAL_ENCODING_BIT_GPS_TIME_TYPE    0
 #define LAS_TOOLS_GLOBAL_ENCODING_BIT_WDP_INTERNAL     1
@@ -164,6 +167,28 @@ public:
   inline void setDigitizerOffset(F64 offset) {((F64*)&(data[18]))[0] = offset;};
 private:
   U8 data[26];
+
+public:
+  void check_wave_packet_descriptor(std::function<void(const std::string&, LAS_MESSAGE_TYPE)> emit) {
+    std::ostringstream oss_msg;
+
+    if ((getBitsPerSample() != 8) && (getBitsPerSample() != 16)) {
+      oss_msg << "bits per sample is " << (I32)getBitsPerSample() << " instead of 8 or 16 for wave packet descr ";
+      emit(oss_msg.str(), LAS_WARNING);
+    }
+    if (getNumberOfSamples() == 0) {
+      oss_msg << "number of samples is zero for wave packet descr ";
+      emit(oss_msg.str(), LAS_WARNING);
+    }
+    if (getNumberOfSamples() > 8096) {
+      oss_msg << "number of samples " << getNumberOfSamples() << " is unusually large for wave packet descr ";
+      emit(oss_msg.str(), LAS_WARNING);
+    }
+    if (getTemporalSpacing() == 0) {
+      oss_msg << "temporal spacing is zero for wave packet descr ";
+      emit(oss_msg.str(), LAS_WARNING);
+    }
+  }
 };
 
 class LASLIB_DLL LASvlr_copc_info
@@ -749,6 +774,7 @@ public:
       evlrs = (LASevlr*)malloc_las(sizeof(LASevlr) * number_of_extended_variable_length_records);
     }
     if (evlrs != nullptr) {
+      memset((void*)&(evlrs[i]), 0, sizeof(LASevlr));
       evlrs[i].reserved = 0;  // used to be 0xAABB
       strncpy_las(evlrs[i].user_id, LAS_VLR_USER_ID_CHAR_LEN, user_id);
       evlrs[i].record_id = record_id;
@@ -1074,6 +1100,8 @@ public:
     }
   }
 
+  // getter functions
+
   std::string get_GUID() {
     char guid_buffer[256];
     snprintf(
@@ -1088,6 +1116,43 @@ public:
     snprintf(version_buffer, sizeof(version_buffer), "%d.%d", version_major, version_minor);
     return std::string(version_buffer);
   }
+
+  /// Converts the year and day of year stored in the LAS header into a YYYY-MM-DD date or 'unknown' if the values are invalid and retuns it
+  std::string get_dayOfYear_to_date_string() {
+    if (this->file_creation_year == 0 || this->file_creation_day == 0) {
+      return "";
+    }
+
+    std::tm date = {};
+    date.tm_year = this->file_creation_year - 1900;
+    date.tm_mday = this->file_creation_day;
+
+    if (std::mktime(&date) == -1) {
+      return "";
+    }
+
+    char buffer[16];
+    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", &date);
+    return buffer;
+  }
+
+  U64 get_number_of_point_records_uni() {
+    if (this->extended_number_of_point_records != 0) {
+      return this->extended_number_of_point_records;
+    }
+    return this->number_of_point_records;
+  }
+
+  U64 get_number_of_points_by_return_uni(U8 idx) {
+    if (this->version_minor >= 4 ) {
+      if (idx < 15) {
+        return this->extended_number_of_points_by_return[idx];
+      }
+    } else if (idx < 5) {
+      return this->number_of_points_by_return[idx];
+    }
+    return 0;
+  };
 
   ~LASheader()
   {

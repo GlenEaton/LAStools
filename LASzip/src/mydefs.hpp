@@ -60,6 +60,7 @@
 #include <cmath>
 #include <filesystem>
 #include <type_traits>
+#include <set>
 
 typedef char CHAR;
 
@@ -261,6 +262,8 @@ typedef union U64F64 {
 #define strdup_las(string) strdup(string);
 #endif
 
+
+
 #define ENDIANSWAP16(n) (((((U16)n) << 8) & 0xFF00) | ((((U16)n) >> 8) & 0x00FF))
 
 #define ENDIANSWAP32(n)                                                                                                                              \
@@ -376,6 +379,19 @@ inline unsigned int swap_endian_uint(unsigned int input) {
   return output;
 }
 
+// Checks whether the point (x, y) within a rectangle (x1,y1,x2,y2)
+inline BOOL is_inside_rectangle(F64 x, F64 y, const F64 rect[4]) {
+  return (x >= rect[0] && x <= rect[2] && y >= rect[1] && y <= rect[3]);
+}
+
+// Checks whether the point (x, y) within a circle with a given center and radius (center_x, center_y, radius)
+inline BOOL is_inside_circle(F64 x, F64 y, const F64 circle[3]) {
+  const double dx = x - circle[0];
+  const double dy = y - circle[1];
+
+  return (dx*dx + dy*dy) <= (circle[2] * circle[2]);
+}
+
 #if defined(_WIN32)
 wchar_t* UTF8toUTF16(const char* utf8);
 wchar_t* ANSItoUTF16(const char* ansi);
@@ -472,6 +488,8 @@ inline I64 ftell_las(FILE* file) {
 #endif
 }
 
+
+
 /// Reads file information (size, time, permissions) across platforms as a 64-bit compatible function
 inline int stat_las(const char* path, las_stat_t* buf) {
 #if defined(_WIN32) && !defined(__MINGW32__)
@@ -531,17 +549,17 @@ bool IsLasLazFile(std::string fn);
 /// returns TRUE if 'val' is found in 'vec'
 bool StringInVector(const std::string& value, const std::vector<std::string>& array, bool casesense);
 
-void* realloc_las(void* ptr, size_t size);
-void* malloc_las(size_t size);
+LASLIB_DLL void* realloc_las(void* ptr, size_t size);
+LASLIB_DLL void* malloc_las(size_t size);
 void bytes_to_readable(size_t bytes, double* value_out, const char** unit_out);
 
 size_t get_available_RAM();
 bool check_available_RAM(size_t size);
 
 /// Wrapper for `sscanf` on other platforms than _MSC_VER and `sscanf_s` on Windows and ensures that the size is passed correctly for strings.
-int sscanf_las(const char* buffer, const char* format, ...);
+LASLIB_DLL int sscanf_las(const char* buffer, const char* format, ...);
 /// Wrapper for `strncpy` on other platforms than _MSC_VER and `strncpy_s` on Windows.
-void strncpy_las(char* dest, size_t destsz, const char* src, size_t count = 0);
+LASLIB_DLL void strncpy_las(char* dest, size_t destsz, const char* src, size_t count = 0);
 
 #ifdef BOOST_USE
 #define BOOST_PRE boost::algorithm::
@@ -569,7 +587,7 @@ int stoidefault(const std::string& val, int def = 0);
 /// string to double with default value (no exception)
 double stoddefault(const std::string& val, double def = 0);
 
-/// Function for rounding to a specific number of decimal places
+/// Function for rounding double to a specific number of decimal places
 double DoubleRound(double value, int decimals);
 
 /// return double as string rounded to a maximum number of decimal places. optional trim trailing 0s
@@ -592,6 +610,25 @@ BOOL file_exists(const std::string& path);
 
 /// Get the digits 
 I32 get_digits(F64 scale_factor); 
+
+/// Correctly encapsulates CSV special characters and doubles quotation marks for valid CSV
+std::string escape_csv_value(const std::string& value);
+/// Converts all XML reserved characters in the string to their safe entity codes for valid XML
+std::string escape_xml_value(const std::string& value);
+
+// Groups consecutive indices from a sorted set into compact ranges.
+std::string compress_indices(const std::set<I32>& indices);
+
+/// Inline template function for resetting and filling an ostringstream
+template <typename... Args>
+inline void set_oss_content(std::ostringstream& oss, Args&&... args) {
+  // delete content and reset status flags
+  oss.str("");
+  oss.clear();
+
+  // merge content
+  (oss << ... << std::forward<Args>(args));
+}
 
 /// Checks at runtime whether the system stores its multi-byte numbers in little-endian format in memory
 namespace Endian {

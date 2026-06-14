@@ -298,6 +298,7 @@ class LASLIB_DLL LASreadOpener {
   CHAR* get_file_name_base(U32 number) const;
   void set_file_name(const CHAR* file_name, BOOL unique = FALSE);
   BOOL add_file_name(const CHAR* file_name, BOOL unique = FALSE);
+  BOOL add_file_name_recursive(const std::string& pattern, BOOL unique);
   BOOL add_list_of_files(const CHAR* list_of_files, BOOL unique = FALSE);
   void delete_file_name(U32 file_name_id);
   BOOL set_file_name_current(U32 file_name_id);
@@ -305,6 +306,10 @@ class LASLIB_DLL LASreadOpener {
   void set_merged(const BOOL merged);
   BOOL is_merged() const {
     return merged;
+  };
+  void set_subdir(const BOOL subdir);
+  inline BOOL is_subdir() const {
+    return subdir;
   };
   void set_stored(const BOOL stored);
   BOOL is_stored() const {
@@ -427,12 +432,18 @@ class LASLIB_DLL LASreadOpener {
   BOOL get_use_stdin() {
     return use_stdin;
   };
+  BOOL is_validation() {
+    return this->is_validate;
+  };
+  void set_validation(BOOL is_validate) {
+    this->is_validate = is_validate;
+  };
   LASreadOpener();
   ~LASreadOpener();
 
  private:
-#ifdef _WIN32
   BOOL add_file_name_single(const CHAR* file_name, BOOL unique = FALSE);
+#ifdef _WIN32
   BOOL add_neighbor_file_name_single(const CHAR* neighbor_file_name, BOOL unique = FALSE);
 #endif
   BOOL add_file_name(const CHAR* file_name, U32 ID, BOOL unique);
@@ -440,6 +451,7 @@ class LASLIB_DLL LASreadOpener {
   U32 io_ibuffer_size;
   const CHAR* file_name;
   BOOL merged;
+  BOOL subdir;
   BOOL stored;
   U32 file_name_current;
   CHAR** file_names;
@@ -497,6 +509,7 @@ class LASLIB_DLL LASreadOpener {
   BOOL pipe_on;
   BOOL use_stdin;
   BOOL unique;
+  BOOL is_validate;
 
   // optional extras
   LASindex* index;
