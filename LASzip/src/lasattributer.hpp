@@ -606,6 +606,7 @@ class LASLIB_DLL LASattributer {
   BOOL init_attributes(U32 number_attributes, LASattribute* attributes) {
     U32 i;
     clean_attributes();
+    attributes_linked = TRUE;
     this->number_attributes = number_attributes;
     this->attributes = (LASattribute*)malloc_las(sizeof(LASattribute) * number_attributes);
     if (this->attributes == 0) {
@@ -632,6 +633,7 @@ class LASLIB_DLL LASattributer {
 
   I32 add_attribute(const LASattribute attribute) {
     if (attribute.get_size()) {
+      attributes_linked = TRUE;
       if (attributes) {
         number_attributes++;
         attributes = (LASattribute*)realloc_las(attributes, sizeof(LASattribute) * number_attributes);
